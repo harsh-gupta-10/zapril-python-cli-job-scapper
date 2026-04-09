@@ -1,0 +1,8 @@
+python-jobspy>=1.1
+pandas>=2.0
+rapidfuzz>=3.0
+requests>=2.31
+beautifulsoup4>=4.12
+playwright>=1.40
+rich>=13.0
+geopy>=2.4
