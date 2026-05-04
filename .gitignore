@@ -45,3 +45,5 @@ implementation_plan.md
 # OS
 .DS_Store
 Thumbs.db
+
+.env

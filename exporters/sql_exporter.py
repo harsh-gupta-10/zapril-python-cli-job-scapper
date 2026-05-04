@@ -2,6 +2,9 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine
 from rich.console import Console
+from dotenv import load_dotenv
+
+load_dotenv()
 
 console = Console()
 
