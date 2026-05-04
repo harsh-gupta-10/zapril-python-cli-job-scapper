@@ -68,11 +68,6 @@ def scrape_with_jobspy(
         console.print("[yellow]⚠[/] No valid JobSpy platforms selected.")
         return pd.DataFrame()
 
-    # Build the google_search_term if Google is included
-    google_search_term = None
-    if "google" in site_names:
-        google_search_term = f"{search_term} jobs in {location}"
-
     # Build scrape parameters
     scrape_params = {
         "site_name": site_names,
@@ -83,9 +78,6 @@ def scrape_with_jobspy(
         "country_indeed": DEFAULT_COUNTRY_INDEED,
         "verbose": verbose,
     }
-
-    if google_search_term:
-        scrape_params["google_search_term"] = google_search_term
 
     if job_type:
         scrape_params["job_type"] = job_type
@@ -133,7 +125,7 @@ def scrape_with_jobspy(
             # Try scraping platforms individually as fallback
             console.print("[yellow]  Attempting individual platform scraping...[/]")
             all_jobs = _scrape_individual_platforms(
-                site_names, scrape_params, progress, google_search_term
+                site_names, scrape_params, progress
             )
 
     if all_jobs.empty:
@@ -152,7 +144,6 @@ def _scrape_individual_platforms(
     site_names: list[str],
     base_params: dict,
     progress: Progress,
-    google_search_term: str | None,
 ) -> pd.DataFrame:
     """
     Fallback: scrape each platform individually so one failure
@@ -167,11 +158,6 @@ def _scrape_individual_platforms(
         params = base_params.copy()
         params["site_name"] = [site]
 
-        # Google needs its own search term
-        if site != "google" and "google_search_term" in params:
-            del params["google_search_term"]
-        elif site == "google" and google_search_term:
-            params["google_search_term"] = google_search_term
 
         task = progress.add_task(f"[cyan]  ↳ Scraping {site}...", total=None)
 

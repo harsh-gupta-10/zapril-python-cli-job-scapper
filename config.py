@@ -3,16 +3,21 @@ Configuration constants for the Job Scrapper.
 """
 
 # ─── Platform Settings ────────────────────────────────────────────────
-SUPPORTED_PLATFORMS = ["linkedin", "indeed", "naukri", "google", "glassdoor"]
+# Platforms handled by python-jobspy (HTTP-based, fast)
+JOBSPY_PLATFORMS = ["linkedin", "indeed"]
+# Platforms with custom Playwright scrapers (browser-based, reliable)
+NAUKRI_ENABLED = True
+GOOGLE_JOBS_ENABLED = True
+GLASSDOOR_ENABLED = True
 INTERNSHALA_ENABLED = True
+
+# All supported platforms for display / CLI help
+SUPPORTED_PLATFORMS = JOBSPY_PLATFORMS.copy()  # JobSpy handles these
 
 # python-jobspy site_name values
 JOBSPY_SITE_MAP = {
     "linkedin": "linkedin",
     "indeed": "indeed",
-    "naukri": "naukri",
-    "google": "google",
-    "glassdoor": "glassdoor",
 }
 
 # ─── Scraping Defaults ────────────────────────────────────────────────

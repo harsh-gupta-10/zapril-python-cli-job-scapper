@@ -18,7 +18,11 @@ from rich.text import Text
 
 from config import (
     SUPPORTED_PLATFORMS,
+    JOBSPY_PLATFORMS,
     INTERNSHALA_ENABLED,
+    GLASSDOOR_ENABLED,
+    NAUKRI_ENABLED,
+    GOOGLE_JOBS_ENABLED,
     DEFAULT_MAX_RESULTS,
     DEFAULT_HOURS_OLD,
     DEFAULT_VERBOSE,
@@ -56,6 +60,7 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  %(prog)s --location "Mumbai"                              # all jobs in Mumbai
   %(prog)s --search "Software Engineer" --location "Mumbai"
   %(prog)s -s "Data Analyst" -l "Bangalore" -p linkedin indeed naukri
   %(prog)s -s "Python Developer" -l "Delhi" --max-results 50 --hours-old 72
@@ -64,12 +69,13 @@ Examples:
         """,
     )
 
-    # Required arguments
+    # Search argument (optional — omit to scrape all jobs in the location)
     parser.add_argument(
         "-s", "--search",
         type=str,
-        required=True,
-        help="Job title or keywords to search for",
+        required=False,
+        default=None,
+        help="Job title or keywords to search for (omit to scrape all jobs in the location)",
     )
     parser.add_argument(
         "-l", "--location",
@@ -83,7 +89,7 @@ Examples:
         "-p", "--platforms",
         nargs="+",
         default=None,
-        help=f"Platforms to scrape (default: all). Options: {', '.join(SUPPORTED_PLATFORMS + ['internshala'])}",
+        help="Platforms to scrape (default: all). Options: linkedin, indeed, naukri, google, glassdoor, internshala",
     )
     parser.add_argument(
         "-n", "--max-results",
@@ -99,7 +105,7 @@ Examples:
     )
     parser.add_argument(
         "-f", "--format",
-        choices=["csv", "json", "both"],
+        choices=["csv", "json", "both", "sql"],
         default="csv",
         help="Output format (default: csv)",
     )
@@ -136,7 +142,22 @@ Examples:
     parser.add_argument(
         "--no-internshala",
         action="store_true",
-        help="Skip Internshala scraping (Internshala uses Playwright and is slower)",
+        help="Skip Internshala scraping",
+    )
+    parser.add_argument(
+        "--no-glassdoor",
+        action="store_true",
+        help="Skip Glassdoor scraping",
+    )
+    parser.add_argument(
+        "--no-naukri",
+        action="store_true",
+        help="Skip Naukri scraping",
+    )
+    parser.add_argument(
+        "--no-google",
+        action="store_true",
+        help="Skip Google Jobs scraping",
     )
 
     return parser.parse_args()
@@ -146,22 +167,35 @@ def main():
     """Main execution flow."""
     args = parse_args()
 
+    # Resolve the search term — when omitted, scrape all jobs in the location
+    search_display = args.search if args.search else f"All jobs in {args.location}"
+    search_term = args.search if args.search else ""  # broad / empty query
+
     print_banner()
 
     # Display search config
-    console.print(f"[bold]Search:[/]     [cyan]{args.search}[/]")
+    console.print(f"[bold]Search:[/]     [cyan]{search_display}[/]")
     console.print(f"[bold]Location:[/]   [cyan]{args.location}[/]")
 
     # Determine platforms
-    all_platforms = SUPPORTED_PLATFORMS.copy()
+    all_platforms = JOBSPY_PLATFORMS.copy()  # LinkedIn, Indeed
+    if NAUKRI_ENABLED and not args.no_naukri:
+        all_platforms.append("naukri")
+    if GOOGLE_JOBS_ENABLED and not args.no_google:
+        all_platforms.append("google")
+    if GLASSDOOR_ENABLED and not args.no_glassdoor:
+        all_platforms.append("glassdoor")
     if INTERNSHALA_ENABLED and not args.no_internshala:
         all_platforms.append("internshala")
 
     platforms = args.platforms if args.platforms else all_platforms
     platforms = [p.lower().strip() for p in platforms]
 
-    # Separate JobSpy platforms from Internshala
-    jobspy_platforms = [p for p in platforms if p in SUPPORTED_PLATFORMS]
+    # Separate JobSpy platforms from Playwright-based scrapers
+    jobspy_platforms = [p for p in platforms if p in JOBSPY_PLATFORMS]
+    scrape_naukri = "naukri" in platforms and not args.no_naukri
+    scrape_google = "google" in platforms and not args.no_google
+    scrape_glassdoor = "glassdoor" in platforms and not args.no_glassdoor
     scrape_internshala = "internshala" in platforms and not args.no_internshala
 
     console.print(
@@ -198,7 +232,7 @@ def main():
         from scrapers.jobspy_scraper import scrape_with_jobspy
 
         jobspy_results = scrape_with_jobspy(
-            search_term=args.search,
+            search_term=search_term,
             location=args.location,
             platforms=jobspy_platforms,
             max_results=args.max_results,
@@ -212,13 +246,61 @@ def main():
         if not jobspy_results.empty:
             all_jobs = pd.concat([all_jobs, jobspy_results], ignore_index=True)
 
-    # ── Scrape Internshala ────────────────────────────────────────
+    # ── Scrape Naukri (Playwright) ────────────────────────────────
+    if scrape_naukri:
+        console.print()
+        from scrapers.naukri_scraper import scrape_naukri as _scrape_naukri
+
+        naukri_results = _scrape_naukri(
+            search_term=search_term,
+            location=args.location,
+            max_results=args.max_results,
+            hours_old=args.hours_old,
+            job_type=args.job_type,
+        )
+
+        if not naukri_results.empty:
+            all_jobs = pd.concat([all_jobs, naukri_results], ignore_index=True)
+
+    # ── Scrape Google Jobs (Playwright) ───────────────────────────
+    if scrape_google:
+        console.print()
+        from scrapers.google_jobs_scraper import scrape_google_jobs as _scrape_google
+
+        google_results = _scrape_google(
+            search_term=search_term,
+            location=args.location,
+            max_results=args.max_results,
+            hours_old=args.hours_old,
+            job_type=args.job_type,
+        )
+
+        if not google_results.empty:
+            all_jobs = pd.concat([all_jobs, google_results], ignore_index=True)
+
+    # ── Scrape Glassdoor (Playwright) ─────────────────────────────
+    if scrape_glassdoor:
+        console.print()
+        from scrapers.glassdoor_scraper import scrape_glassdoor as _scrape_glassdoor
+
+        glassdoor_results = _scrape_glassdoor(
+            search_term=search_term,
+            location=args.location,
+            max_results=args.max_results,
+            hours_old=args.hours_old,
+            job_type=args.job_type,
+        )
+
+        if not glassdoor_results.empty:
+            all_jobs = pd.concat([all_jobs, glassdoor_results], ignore_index=True)
+
+    # ── Scrape Internshala (Playwright) ───────────────────────────
     if scrape_internshala:
         console.print()
         from scrapers.internshala_scraper import scrape_internshala as _scrape_internshala
 
         internshala_results = _scrape_internshala(
-            search_term=args.search,
+            search_term=search_term,
             location=args.location,
             max_results=args.max_results,
             include_internships=(args.job_type in (None, "internship")),
@@ -287,7 +369,7 @@ def main():
     output_path = export_results(
         df=all_jobs,
         location=args.location,
-        search_term=args.search,
+        search_term=search_term or "all_jobs",
         output_format=args.format,
         companies_in_location=companies_in_location,
     )

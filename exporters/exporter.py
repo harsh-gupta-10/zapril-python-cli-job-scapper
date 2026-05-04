@@ -95,6 +95,13 @@ def export_results(
                 f.write(f"• {company}\n")
         console.print(f"[green]🏢 Companies list saved:[/] {companies_path}")
 
+    # ── Export SQL ────────────────────────────────────────────────
+    if output_format in ("sql", "both"):
+        from exporters.sql_exporter import export_to_cloud_sql
+        success = export_to_cloud_sql(df_export)
+        if success:
+            saved_files.append("Cloud SQL Database")
+
     # ── Display Summary Table ────────────────────────────────────
     _print_summary(df, location, search_term, companies_in_location)
 

@@ -131,8 +131,16 @@ def _build_internshala_url(
     search_term: str, location: str, is_internship: bool
 ) -> str:
     """Build the Internshala search URL."""
-    keyword_slug = re.sub(r"[^a-zA-Z0-9]+", "-", search_term.strip().lower()).strip("-")
     location_slug = re.sub(r"[^a-zA-Z0-9]+", "-", location.strip().lower()).strip("-")
+
+    # When no search term is provided, scrape all listings in the location
+    if not search_term or not search_term.strip():
+        if is_internship:
+            return f"{INTERNSHALA_BASE_URL}/internships/internship-in-{location_slug}"
+        else:
+            return f"{INTERNSHALA_BASE_URL}/jobs/jobs-in-{location_slug}"
+
+    keyword_slug = re.sub(r"[^a-zA-Z0-9]+", "-", search_term.strip().lower()).strip("-")
 
     if is_internship:
         return f"{INTERNSHALA_BASE_URL}/internships/{keyword_slug}-internship-in-{location_slug}"
