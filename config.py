@@ -22,7 +22,7 @@ JOBSPY_SITE_MAP = {
 
 # ─── Scraping Defaults ────────────────────────────────────────────────
 DEFAULT_MAX_RESULTS = 25
-DEFAULT_HOURS_OLD = 168  # 7 days
+DEFAULT_HOURS_OLD = 48  # 2 days
 DEFAULT_COUNTRY_INDEED = "india"
 DEFAULT_VERBOSE = 1
 REQUEST_DELAY_SECONDS = 2  # Delay between requests to be respectful

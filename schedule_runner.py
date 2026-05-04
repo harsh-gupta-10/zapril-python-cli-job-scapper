@@ -6,19 +6,30 @@ from rich.console import Console
 
 console = Console()
 
-JOB_TYPES = [
+def load_list_from_file(filename, default_list):
+    try:
+        with open(filename, 'r') as f:
+            # Read lines, strip whitespace, and filter out empty lines
+            items = [line.strip() for line in f.readlines() if line.strip()]
+            return items if items else default_list
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not read {filename}, using defaults. Error: {e}[/]")
+        return default_list
+
+# Load dynamic lists
+JOB_TYPES = load_list_from_file("job_titles.txt", [
     "Software Engineer", "Frontend Developer", "Backend Developer", "Full Stack Developer",
     "Data Scientist", "Data Analyst", "Machine Learning Engineer", "DevOps Engineer",
     "Cloud Architect", "Product Manager", "UI/UX Designer", "QA Engineer",
     "Business Analyst", "System Administrator", "Cybersecurity Analyst"
-]
+])
 
-CITIES = [
+CITIES = load_list_from_file("cities.txt", [
     "Mumbai", "Bangalore", "New Delhi", "Hyderabad", "Pune",
     "Chennai", "Kolkata", "Ahmedabad", "Gurgaon", "Noida",
     "Jaipur", "Chandigarh", "Lucknow", "Indore", "Kochi",
     "Thiruvananthapuram", "Bhopal", "Visakhapatnam", "Surat", "Nagpur"
-]
+])
 
 def run_schedule():
     console.print(f"[bold cyan]Starting scheduled job scraping at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/]")

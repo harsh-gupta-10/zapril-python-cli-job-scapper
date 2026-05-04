@@ -1,4 +1,12 @@
-# Use Playwright's official Python image which includes necessary browser binaries
+# Stage 1: Build the React Admin Dashboard
+FROM node:20-slim AS build-stage
+WORKDIR /app/admin
+COPY admin/package*.json ./
+RUN npm install
+COPY admin/ ./
+RUN npm run build
+
+# Stage 2: Python environment
 FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 
 # Set environment variables
@@ -8,15 +16,16 @@ WORKDIR $APP_HOME
 
 # Copy requirements and install
 COPY requirements.txt ./
-# Also install Flask and gunicorn for the web server
-RUN pip install --no-cache-dir -r requirements.txt Flask gunicorn
+RUN pip install --no-cache-dir -r requirements.txt Flask gunicorn flask-cors
 
-# Install playwright browsers (though the base image should have them)
+# Install playwright browsers
 RUN playwright install chromium
 
-# Copy local code to the container image
+# Copy local code
 COPY . ./
 
-# Run the web service on container startup
-# Set timeout to 3600 seconds (1 hour) to match max Cloud Run timeout for the long-running schedule
+# Copy built React files from Stage 1
+COPY --from=build-stage /app/admin/dist ./admin/dist
+
+# Run the web service
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 3600 app:app
