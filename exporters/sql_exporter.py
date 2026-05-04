@@ -26,12 +26,18 @@ def export_to_cloud_sql(df: pd.DataFrame, table_name: str = "jobs"):
         return False
 
     try:
-        if db_type == "postgresql":
-            # Using pg8000 or psycopg2
-            engine_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        instance_conn_name = os.environ.get("INSTANCE_CONNECTION_NAME")
+        
+        if instance_conn_name:
+            if db_type == "postgresql":
+                engine_url = f"postgresql+pg8000://{db_user}:{db_pass}@/{db_name}?unix_sock=/cloudsql/{instance_conn_name}/.s.PGSQL.5432"
+            else:
+                engine_url = f"mysql+pymysql://{db_user}:{db_pass}@/{db_name}?unix_socket=/cloudsql/{instance_conn_name}"
         else:
-            # Using pymysql
-            engine_url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            if db_type == "postgresql":
+                engine_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            else:
+                engine_url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
             
         engine = create_engine(engine_url)
         
