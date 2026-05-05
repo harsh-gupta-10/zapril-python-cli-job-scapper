@@ -137,7 +137,10 @@ def get_jobs():
                 "offset": offset
             })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        print(f"ERROR in get_jobs: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e), "traceback": traceback.format_exc() if os.getenv("FLASK_DEBUG") == "1" else None}), 500
 
 @app.route("/api/jobs/<int:job_id>")
 def get_job_detail(job_id):
@@ -369,12 +372,14 @@ def get_stats():
         with engine.connect() as conn:
             table_exists = conn.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'jobs')")).scalar()
             if not table_exists:
-                return jsonify({"total_jobs": 0, "cities": 0, "companies": 0})
-            total_jobs = conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar()
-            unique_cities_count = conn.execute(text("SELECT COUNT(DISTINCT location) FROM jobs")).scalar()
-            unique_companies = conn.execute(text("SELECT COUNT(DISTINCT company) FROM jobs")).scalar()
+                return jsonify({"total_jobs": 0, "cities": 0, "companies": 0, "locations_list": [], "sources_list": []})
             
-            # Get list of unique locations for filters
+            # Combined count query
+            stats_query = "SELECT COUNT(*), COUNT(DISTINCT location), COUNT(DISTINCT company) FROM jobs"
+            stats_result = conn.execute(text(stats_query)).first()
+            total_jobs, unique_cities_count, unique_companies = stats_result if stats_result else (0, 0, 0)
+            
+            # Get list of unique locations for filters (Limit to avoid memory explosion if ever needed, but 3k is fine)
             locations_result = conn.execute(text("SELECT DISTINCT location FROM jobs WHERE location IS NOT NULL AND location != '' ORDER BY location"))
             locations = [row[0] for row in locations_result]
             
@@ -390,6 +395,9 @@ def get_stats():
                 "sources_list": sources
             })
     except Exception as e:
+        import traceback
+        print(f"ERROR in get_stats: {str(e)}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/auth/login", methods=["POST"])
