@@ -206,7 +206,7 @@ function App() {
     if (!window.confirm('Triggering a full scrape might take several minutes. Continue?')) return;
     setTriggering(true);
     try {
-      await axios.post('/run-scraper');
+      await axios.post('/api/run-scraper');
       alert('Scraper triggered successfully! It will run in the background.');
       fetchData();
     } catch (error) {
@@ -220,7 +220,7 @@ function App() {
     setTesting(true);
     setTestOutput(null);
     try {
-      const res = await axios.get('/run-test');
+      const res = await axios.get('/api/run-test');
       setTestOutput(res.data);
     } catch (error) {
       setTestOutput({ error: error.message });

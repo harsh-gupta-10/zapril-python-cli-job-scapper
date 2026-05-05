@@ -15,21 +15,28 @@ else:
     CORS(app) # Enable CORS for development
 
 # Database configuration
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASS", "ZaprilPassword123!")
-DB_NAME = os.getenv("DB_NAME", "job_data")
-DB_TYPE = os.getenv("DB_TYPE", "postgresql")
-INSTANCE_CONNECTION_NAME = os.getenv("INSTANCE_CONNECTION_NAME")
+def get_db_config():
+    return {
+        "user": os.getenv("DB_USER", "postgres"),
+        "pass": os.getenv("DB_PASS", "ZaprilPassword123!"),
+        "name": os.getenv("DB_NAME", "job_data"),
+        "type": os.getenv("DB_TYPE", "postgresql"),
+        "host": os.getenv("DB_HOST", "34.100.255.74"),
+        "instance": os.getenv("INSTANCE_CONNECTION_NAME")
+    }
 
 def get_engine():
-    if INSTANCE_CONNECTION_NAME:
+    config = get_db_config()
+    if config["instance"]:
         # Cloud SQL Unix Socket connection (pg8000 format)
-        db_url = f"postgresql+pg8000://{DB_USER}:{DB_PASS}@/{DB_NAME}?unix_sock=/cloudsql/{INSTANCE_CONNECTION_NAME}/.s.PGSQL.5432"
+        # Note: /cloudsql/ is the standard prefix on Cloud Run
+        socket_path = f"/cloudsql/{config['instance']}"
+        db_url = f"postgresql+pg8000://{config['user']}:{config['pass']}@/{config['name']}?unix_sock={socket_path}/.s.PGSQL.5432"
     else:
         # Local/Public IP connection
-        DB_HOST = os.getenv("DB_HOST", "34.100.255.74")
-        db_url = f"{DB_TYPE}+pg8000://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
+        db_url = f"{config['type']}+pg8000://{config['user']}:{config['pass']}@{config['host']}/{config['name']}"
     return create_engine(db_url)
+
 
 @app.route("/api/debug")
 def debug():
@@ -51,21 +58,31 @@ def debug():
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     import time
-    data = request.json
-    password = data.get("password")
-    
-    # Securely retrieve admin password from environment ONLY
-    admin_pass = os.getenv("ADMIN_PASSWORD")
-    
-    if not admin_pass:
-        return jsonify({"error": "Admin password not configured on server"}), 500
-    
-    if password == admin_pass:
-        return jsonify({"token": "authenticated-session-token"}), 200
-    
-    # Artificial delay to prevent brute-force attacks
-    time.sleep(1.5)
-    return jsonify({"error": "Invalid password"}), 401
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
+        password = data.get("password")
+        
+        # Securely retrieve admin password from environment ONLY
+        admin_pass = os.getenv("ADMIN_PASSWORD")
+        
+        if not admin_pass:
+            print("ERROR: ADMIN_PASSWORD environment variable is not set")
+            return jsonify({"error": "Admin password not configured on server"}), 500
+        
+        if password == admin_pass:
+            return jsonify({"token": "authenticated-session-token"}), 200
+        
+        # Artificial delay to prevent brute-force attacks
+        time.sleep(1.5)
+        print(f"Login failed: password mismatch. Received length: {len(password) if password else 0}")
+        return jsonify({"error": "Invalid password"}), 401
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        return jsonify({"error": "Internal server error during login"}), 500
+
 
 @app.route("/api/jobs")
 def get_jobs():
@@ -113,7 +130,7 @@ def get_stats():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route("/run-test")
+@app.route("/api/run-test")
 def run_test():
     import subprocess
     import sys
@@ -139,7 +156,7 @@ def run_test():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@app.route("/run-scraper", methods=["POST", "GET"])
+@app.route("/api/run-scraper", methods=["POST", "GET"])
 def trigger_scraper():
     import subprocess
     import sys

@@ -13,3 +13,4 @@ python-dotenv>=1.0
 Flask>=3.0.0
 flask-cors>=4.0.0
 gunicorn>=21.0.0
+curl-cffi>=0.5.10
