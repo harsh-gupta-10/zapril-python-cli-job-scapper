@@ -90,18 +90,70 @@ def run_scraper_task(phase=False, jobs=3, cities=3):
 @app.route("/api/jobs")
 def get_jobs():
     try:
+        limit = request.args.get('limit', default=100, type=int)
+        offset = request.args.get('offset', default=0, type=int)
+        search = request.args.get('search', default='', type=str)
+        location = request.args.get('location', default='', type=str)
+        source = request.args.get('source', default='', type=str)
+
         engine = get_engine()
         with engine.connect() as conn:
             table_exists = conn.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'jobs')")).scalar()
             if not table_exists:
-                return jsonify([])
-            result = conn.execute(text("SELECT * FROM jobs ORDER BY date_posted DESC LIMIT 500"))
+                return jsonify({"jobs": [], "total": 0})
+            
+            base_query = "FROM jobs WHERE 1=1"
+            params = {}
+            
+            if search:
+                base_query += " AND (LOWER(title) LIKE LOWER(:search) OR LOWER(company) LIKE LOWER(:search))"
+                params['search'] = f"%{search}%"
+            if location:
+                base_query += " AND LOWER(location) = LOWER(:location)"
+                params['location'] = location
+            if source:
+                base_query += " AND source = :source"
+                params['source'] = source
+
+            # Get total count for pagination
+            total_count = conn.execute(text(f"SELECT COUNT(*) {base_query}"), params).scalar()
+            
+            # Get paginated data (EXCLUDE DESCRIPTION for memory efficiency)
+            query = f"SELECT id, title, company, location, date_posted, source, job_url {base_query} ORDER BY date_posted DESC LIMIT :limit OFFSET :offset"
+            params['limit'] = limit
+            params['offset'] = offset
+            
+            result = conn.execute(text(query), params)
             jobs = [dict(row._mapping) for row in result]
             for job in jobs:
                 for key, value in job.items():
                     if hasattr(value, "isoformat"):
                         job[key] = value.isoformat()
-            return jsonify(jobs)
+            
+            return jsonify({
+                "jobs": jobs,
+                "total": total_count,
+                "limit": limit,
+                "offset": offset
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/jobs/<int:job_id>")
+def get_job_detail(job_id):
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT * FROM jobs WHERE id = :id"), {"id": job_id}).first()
+            if not result:
+                return jsonify({"error": "Job not found"}), 404
+            
+            job = dict(result._mapping)
+            for key, value in job.items():
+                if hasattr(value, "isoformat"):
+                    job[key] = value.isoformat()
+            
+            return jsonify(job)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -263,7 +315,7 @@ def get_logs():
         if os.path.exists(filename):
             with open(filename, "r") as f:
                 lines = f.readlines()
-                return jsonify({"logs": "".join(lines[-200:])})
+                return jsonify({"logs": "".join(lines[-1000:])})
         return jsonify({"logs": "No logs found."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -319,17 +371,29 @@ def get_stats():
             if not table_exists:
                 return jsonify({"total_jobs": 0, "cities": 0, "companies": 0})
             total_jobs = conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar()
-            unique_cities = conn.execute(text("SELECT COUNT(DISTINCT location) FROM jobs")).scalar()
+            unique_cities_count = conn.execute(text("SELECT COUNT(DISTINCT location) FROM jobs")).scalar()
             unique_companies = conn.execute(text("SELECT COUNT(DISTINCT company) FROM jobs")).scalar()
+            
+            # Get list of unique locations for filters
+            locations_result = conn.execute(text("SELECT DISTINCT location FROM jobs WHERE location IS NOT NULL AND location != '' ORDER BY location"))
+            locations = [row[0] for row in locations_result]
+            
+            # Get list of unique sources
+            sources_result = conn.execute(text("SELECT DISTINCT source FROM jobs WHERE source IS NOT NULL ORDER BY source"))
+            sources = [row[0] for row in sources_result]
+
             return jsonify({
                 "total_jobs": total_jobs,
-                "cities": unique_cities,
-                "companies": unique_companies
+                "cities": unique_cities_count,
+                "companies": unique_companies,
+                "locations_list": locations,
+                "sources_list": sources
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/auth/login", methods=["POST"])
+@app.route("/api/login", methods=["POST"])
 def login():
     import time
     try:

@@ -28,4 +28,4 @@ COPY . ./
 COPY --from=build-stage /app/admin/dist ./admin/dist
 
 # Run the web service
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 3600 app:app
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 4 --timeout 3600 app:app
