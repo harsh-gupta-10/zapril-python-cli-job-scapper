@@ -18,12 +18,13 @@ if os.getenv("FLASK_ENV") == "production":
 else:
     CORS(app) # Enable CORS for development
 
-# Database configuration
+import urllib.parse
+
 def get_db_config():
     return {
         "user": os.getenv("DB_USER", "postgres"),
-        "pass": os.getenv("DB_PASS", "ZaprilPassword123!"),
-        "name": os.getenv("DB_NAME", "job_data"),
+        "pass": os.getenv("DB_PASS", "Zapril#Secure&Job!2024"),
+        "name": os.getenv("DB_NAME", "job_scraper"),
         "type": os.getenv("DB_TYPE", "postgresql"),
         "host": os.getenv("DB_HOST", "34.100.255.74"),
         "instance": os.getenv("INSTANCE_CONNECTION_NAME")
@@ -31,13 +32,16 @@ def get_db_config():
 
 def get_engine():
     config = get_db_config()
+    user = urllib.parse.quote_plus(config["user"])
+    password = urllib.parse.quote_plus(config["pass"])
+    
     if config["instance"]:
         # Cloud SQL Unix Socket connection (pg8000 format)
         socket_path = f"/cloudsql/{config['instance']}"
-        db_url = f"postgresql+pg8000://{config['user']}:{config['pass']}@/{config['name']}?unix_sock={socket_path}/.s.PGSQL.5432"
+        db_url = f"postgresql+pg8000://{user}:{password}@/{config['name']}?unix_sock={socket_path}/.s.PGSQL.5432"
     else:
         # Local/Public IP connection
-        db_url = f"{config['type']}+pg8000://{config['user']}:{config['pass']}@{config['host']}/{config['name']}"
+        db_url = f"{config['type']}+pg8000://{user}:{password}@{config['host']}/{config['name']}"
     return create_engine(db_url)
 
 def load_settings():

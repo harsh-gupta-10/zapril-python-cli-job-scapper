@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 
 def parse_relative_date(date_text: str) -> str:
     """
-    Convert relative date strings like '2 hours ago', '3 days ago', 'today'
-    into YYYY-MM-DD format.
+    Convert relative date strings like '2 hours ago', '3 days ago', 'today',
+    'few hours ago', 'just now' into YYYY-MM-DD format.
     """
     if not date_text:
         return ""
@@ -13,10 +13,10 @@ def parse_relative_date(date_text: str) -> str:
     today = datetime.now()
     
     # Simple cases
-    if "today" in text or "just now" in text or "now" in text or "0 days" in text:
+    if any(phrase in text for phrase in ["today", "just now", "now", "0 days", "few hours", "moments"]):
         return today.strftime("%Y-%m-%d")
     
-    if "yesterday" in text or "1 day ago" in text:
+    if any(phrase in text for phrase in ["yesterday", "1 day ago", "a day ago"]):
         return (today - timedelta(days=1)).strftime("%Y-%m-%d")
 
     # Patterns for days, hours, minutes
@@ -26,8 +26,6 @@ def parse_relative_date(date_text: str) -> str:
         
     hours_match = re.search(r"(\d+)\s*hour", text)
     if hours_match:
-        # We don't have precision for hours in YYYY-MM-DD, so just return today
-        # Unless it was > 24 hours ago, but then it usually says '1 day ago'
         return today.strftime("%Y-%m-%d")
         
     mins_match = re.search(r"(\d+)\s*min", text)
@@ -46,7 +44,8 @@ def parse_relative_date(date_text: str) -> str:
     try:
         # Remove timezone info for simplicity or handle Z
         clean_date = date_text.split('+')[0].split('Z')[0]
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%b %d, %Y"):
+        # Common formats including those with month names
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%b %d, %Y", "%d %b %Y", "%d %B %Y"):
             try:
                 return datetime.strptime(clean_date, fmt).strftime("%Y-%m-%d")
             except ValueError:

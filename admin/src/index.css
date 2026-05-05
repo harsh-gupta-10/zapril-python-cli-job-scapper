@@ -371,8 +371,83 @@ tr:hover td {
   to { transform: rotate(360deg); }
 }
 
-/* Mobile Responsive Adjustments */
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+  padding: 2.5rem;
+  box-shadow: 0 0 50px rgba(124, 77, 255, 0.2);
+  position: relative;
+}
+
+.description-text h1, .description-text h2, .description-text h3 {
+  color: var(--accent-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+}
+
+.description-text ul, .description-text ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.description-text li {
+  margin-bottom: 0.5rem;
+}
+
+/* Utility Classes */
+.text-muted { color: var(--text-muted) !important; }
+.text-main { color: var(--text-main) !important; }
+.text-xs { font-size: 0.75rem; }
+.text-sm { font-size: 0.875rem; }
+.uppercase { text-transform: uppercase; }
+.font-bold { font-weight: 700; }
+.text-cyan-400 { color: #22d3ee !important; }
+.text-green-400 { color: #4ade80 !important; }
+.sticky { position: sticky; }
+.bottom-0 { bottom: 0; }
+.bg-black\/80 { background-color: rgba(0, 0, 0, 0.8); }
+.backdrop-blur-md { backdrop-filter: blur(12px); }
+.-mx-6 { margin-left: -1.5rem; margin-right: -1.5rem; }
+.-mb-6 { margin-bottom: -1.5rem; }
+.border-t { border-top: 1px solid var(--border-glass); }
+.border-b { border-bottom: 1px solid var(--border-glass); }
+.pb-2 { padding-bottom: 0.5rem; }
+.grid { display: grid; }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.overflow-y-auto { overflow-y: auto; }
+
+/* Custom Scrollbar for Modal */
+.modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-content::-webkit-scrollbar-thumb {
+  background: rgba(124, 77, 255, 0.3);
+  border-radius: 10px;
+}
+
 @media (max-width: 768px) {
+  .modal-content {
+    padding: 1.5rem;
+  }
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+  
   .app-container {
     flex-direction: column;
   }

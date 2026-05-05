@@ -59,6 +59,9 @@ function App() {
   const [testOutput, setTestOutput] = useState(null);
   const [testing, setTesting] = useState(false);
 
+  // Selected Job for Modal
+  const [selectedJob, setSelectedJob] = useState(null);
+
   useEffect(() => {
     if (isLoggedIn) {
       fetchData();
@@ -120,13 +123,16 @@ function App() {
     if (!customCity || !customJobTitle) return alert("Please select both city and job role.");
     setTriggering(true);
     try {
+      const cityVal = typeof customCity === 'object' ? customCity.name : customCity;
+      const jobVal = typeof customJobTitle === 'object' ? customJobTitle.name : customJobTitle;
+      
       await axios.post('/api/scraper/trigger-custom', { 
-        location: customCity, 
-        search: customJobTitle,
+        location: cityVal, 
+        search: jobVal,
         max_results: customMaxResults,
         hours_old: customHoursOld
       });
-      alert(`Scraping started for ${customJobTitle} in ${customCity}!`);
+      alert(`Scraping started for ${jobVal} in ${cityVal}!`);
     } catch(err) {
       alert("Failed to start custom scrape");
     } finally {
@@ -545,7 +551,12 @@ function App() {
                         </td>
                         <td data-label="Date">
                           <div style={{ fontSize: '0.85rem' }}>
-                            {new Date(job.date_posted).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {(() => {
+                              const d = new Date(job.date_posted);
+                              return isNaN(d.getTime()) 
+                                ? (job.date_posted || 'N/A') 
+                                : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                            })()}
                           </div>
                         </td>
                         <td data-label="Platform">
@@ -554,9 +565,18 @@ function App() {
                           </span>
                         </td>
                         <td data-label="Link">
-                          <a href={job.job_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors">
-                             View <ExternalLink size={14} />
-                          </a>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              onClick={() => setSelectedJob(job)}
+                              className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors bg-transparent border-none cursor-pointer"
+                              title="View Description"
+                            >
+                              <Eye size={14} /> View
+                            </button>
+                            <a href={job.job_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors">
+                              Apply <ExternalLink size={14} />
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     )) : (
@@ -622,45 +642,61 @@ function App() {
                       const fromIdx = parseInt(e.dataTransfer.getData("idx"));
                       const type = e.dataTransfer.getData("type");
                       if (type !== "city") return;
-                      const newList = [...citiesConfig];
-                      const [moved] = newList.splice(fromIdx, 1);
-                      newList.splice(idx, 0, moved);
-                      setCitiesConfig(newList);
-                    }}
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.75rem 1rem', 
-                      borderBottom: '1px solid var(--border-glass)',
-                      cursor: 'grab',
-                      transition: 'background 0.2s',
-                      background: city.enabled ? 'transparent' : 'rgba(255,255,255,0.05)',
-                      opacity: city.enabled ? 1 : 0.6
-                    }}
-                    className="hover:bg-white/5"
-                  >
-                    <GripVertical size={16} className="text-gray-500" />
-                    <span style={{ flex: 1, textDecoration: city.enabled ? 'none' : 'line-through' }}>{city.name || city}</span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
+                {citiesConfig.map((city, index) => (
+                  <div key={index} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5 hover:border-purple-500/30 transition-colors">
+                    <div className="flex flex-col gap-1">
                       <button 
-                        style={{ background: 'transparent', border: 'none', color: city.enabled ? '#4ade80' : '#94a3b8', cursor: 'pointer' }}
                         onClick={() => {
-                          const newList = [...citiesConfig];
-                          newList[idx] = { ...newList[idx], enabled: !newList[idx].enabled };
-                          setCitiesConfig(newList);
+                          if (index === 0) return;
+                          const newCities = [...citiesConfig];
+                          [newCities[index-1], newCities[index]] = [newCities[index], newCities[index-1]];
+                          setCitiesConfig(newCities);
                         }}
-                        title={city.enabled ? "Disable" : "Enable"}
+                        className="p-1 hover:text-purple-400 disabled:opacity-30"
+                        disabled={index === 0}
                       >
-                        {city.enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                        <ChevronUp size={14} />
                       </button>
                       <button 
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                        onClick={() => setCitiesConfig(citiesConfig.filter((_, i) => i !== idx))}
+                        onClick={() => {
+                          if (index === citiesConfig.length - 1) return;
+                          const newCities = [...citiesConfig];
+                          [newCities[index+1], newCities[index]] = [newCities[index], newCities[index+1]];
+                          setCitiesConfig(newCities);
+                        }}
+                        className="p-1 hover:text-purple-400 disabled:opacity-30"
+                        disabled={index === citiesConfig.length - 1}
                       >
-                        <Trash2 size={16} />
+                        <ChevronDown size={14} />
                       </button>
                     </div>
+                    
+                    <div className="flex-1 font-medium" style={{ opacity: city.enabled ? 1 : 0.5, textDecoration: city.enabled ? 'none' : 'line-through' }}>
+                      {city.name || city}
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        const newCities = [...citiesConfig];
+                        newCities[index].enabled = !newCities[index].enabled;
+                        setCitiesConfig(newCities);
+                      }}
+                      className={`p-1 transition-colors ${city.enabled ? 'text-green-400' : 'text-gray-500'}`}
+                      title={city.enabled ? "Disable City" : "Enable City"}
+                    >
+                      {city.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                    </button>
+                    
+                    <button 
+                      onClick={() => {
+                        const newCities = citiesConfig.filter((_, i) => i !== index);
+                        setCitiesConfig(newCities);
+                      }}
+                      className="p-1 text-red-400 hover:bg-red-500/10 rounded"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -690,7 +726,7 @@ function App() {
                   style={{ paddingLeft: '1rem' }}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && newJobTitle.trim()) {
-                      setJobTitlesConfig([...jobTitlesConfig, newJobTitle.trim()]);
+                      setJobTitlesConfig([...jobTitlesConfig, { name: newJobTitle.trim(), enabled: true }]);
                       setNewJobTitle('');
                     }
                   }}
@@ -709,56 +745,61 @@ function App() {
                 </button>
               </div>
 
-              <div style={{ flex: 1, maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '0.5rem' }}>
-                {jobTitlesConfig.map((role, idx) => (
-                  <div 
-                    key={idx} 
-                    draggable
-                    onDragStart={(e) => { e.dataTransfer.setData("idx", idx); e.dataTransfer.setData("type", "role"); }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      const fromIdx = parseInt(e.dataTransfer.getData("idx"));
-                      const type = e.dataTransfer.getData("type");
-                      if (type !== "role") return;
-                      const newList = [...jobTitlesConfig];
-                      const [moved] = newList.splice(fromIdx, 1);
-                      newList.splice(idx, 0, moved);
-                      setJobTitlesConfig(newList);
-                    }}
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.75rem 1rem', 
-                      borderBottom: '1px solid var(--border-glass)',
-                      cursor: 'grab',
-                      transition: 'background 0.2s',
-                      background: role.enabled ? 'transparent' : 'rgba(255,255,255,0.05)',
-                      opacity: role.enabled ? 1 : 0.6
-                    }}
-                    className="hover:bg-white/5"
-                  >
-                    <GripVertical size={16} className="text-gray-500" />
-                    <span style={{ flex: 1, textDecoration: role.enabled ? 'none' : 'line-through' }}>{role.name || role}</span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
+                {jobTitlesConfig.map((role, index) => (
+                  <div key={index} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5 hover:border-purple-500/30 transition-colors">
+                    <div className="flex flex-col gap-1">
                       <button 
-                        style={{ background: 'transparent', border: 'none', color: role.enabled ? '#4ade80' : '#94a3b8', cursor: 'pointer' }}
                         onClick={() => {
-                          const newList = [...jobTitlesConfig];
-                          newList[idx] = { ...newList[idx], enabled: !newList[idx].enabled };
-                          setJobTitlesConfig(newList);
+                          if (index === 0) return;
+                          const newRoles = [...jobTitlesConfig];
+                          [newRoles[index-1], newRoles[index]] = [newRoles[index], newRoles[index-1]];
+                          setJobTitlesConfig(newRoles);
                         }}
-                        title={role.enabled ? "Disable" : "Enable"}
+                        className="p-1 hover:text-purple-400 disabled:opacity-30"
+                        disabled={index === 0}
                       >
-                        {role.enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                        <ChevronUp size={14} />
                       </button>
                       <button 
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                        onClick={() => setJobTitlesConfig(jobTitlesConfig.filter((_, i) => i !== idx))}
+                        onClick={() => {
+                          if (index === jobTitlesConfig.length - 1) return;
+                          const newRoles = [...jobTitlesConfig];
+                          [newRoles[index+1], newRoles[index]] = [newRoles[index], newRoles[index+1]];
+                          setJobTitlesConfig(newRoles);
+                        }}
+                        className="p-1 hover:text-purple-400 disabled:opacity-30"
+                        disabled={index === jobTitlesConfig.length - 1}
                       >
-                        <Trash2 size={16} />
+                        <ChevronDown size={14} />
                       </button>
                     </div>
+                    
+                    <div className="flex-1 font-medium" style={{ opacity: role.enabled ? 1 : 0.5, textDecoration: role.enabled ? 'none' : 'line-through' }}>
+                      {role.name || role}
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        const newRoles = [...jobTitlesConfig];
+                        newRoles[index].enabled = !newRoles[index].enabled;
+                        setJobTitlesConfig(newRoles);
+                      }}
+                      className={`p-1 transition-colors ${role.enabled ? 'text-green-400' : 'text-gray-500'}`}
+                      title={role.enabled ? "Disable Role" : "Enable Role"}
+                    >
+                      {role.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        const newRoles = jobTitlesConfig.filter((_, i) => i !== index);
+                        setJobTitlesConfig(newRoles);
+                      }}
+                      className="p-1 text-red-400 hover:bg-red-500/10 rounded"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -931,15 +972,29 @@ function App() {
               </p>
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
                 <div className="input-group" style={{ flex: 1, minWidth: '200px' }}>
-                  <select value={customCity} onChange={e => setCustomCity(e.target.value)}>
+                  <select 
+                    value={typeof customCity === 'object' ? customCity.name : customCity} 
+                    onChange={e => setCustomCity(e.target.value)}
+                  >
                     <option value="" disabled>Select City</option>
-                    {citiesConfig.map(city => <option key={city} value={city}>{city}</option>)}
+                    {citiesConfig.map((city, i) => (
+                      <option key={i} value={city.name || city}>
+                        {city.name || city}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="input-group" style={{ flex: 1, minWidth: '200px' }}>
-                  <select value={customJobTitle} onChange={e => setCustomJobTitle(e.target.value)}>
+                  <select 
+                    value={typeof customJobTitle === 'object' ? customJobTitle.name : customJobTitle} 
+                    onChange={e => setCustomJobTitle(e.target.value)}
+                  >
                     <option value="" disabled>Select Job Role</option>
-                    {jobTitlesConfig.map(role => <option key={role} value={role}>{role}</option>)}
+                    {jobTitlesConfig.map((role, i) => (
+                      <option key={i} value={role.name || role}>
+                        {role.name || role}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="input-group" style={{ flex: '0 0 120px' }}>
@@ -1019,6 +1074,76 @@ function App() {
         )}
 
       </div>
+
+      {/* Job Description Modal */}
+      {selectedJob && (
+        <div className="modal-overlay" onClick={() => setSelectedJob(null)}>
+          <div className="glass-card modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--text-main)' }}>{selectedJob.title}</h2>
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-1 text-purple-400">
+                    <Building2 size={16} /> {selectedJob.company}
+                  </div>
+                  <div className="flex items-center gap-1 text-muted">
+                    <MapPin size={16} /> {selectedJob.location}
+                  </div>
+                  <span className="badge">{selectedJob.source || selectedJob.site}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedJob(null)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <Plus size={24} style={{ transform: 'rotate(45deg)' }} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                <div className="text-xs uppercase text-muted mb-1">Salary Range</div>
+                <div className="text-green-400 font-bold">{selectedJob.salary || 'Not Disclosed'}</div>
+              </div>
+              <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                <div className="text-xs uppercase text-muted mb-1">Date Posted</div>
+                <div className="text-main font-bold">
+                  {new Date(selectedJob.date_posted).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-sm uppercase text-muted mb-4 border-b border-white/10 pb-2">Job Description</h3>
+              <div 
+                className="description-text"
+                style={{ 
+                  color: 'var(--text-main)', 
+                  lineHeight: '1.6', 
+                  fontSize: '0.95rem',
+                  whiteSpace: 'pre-wrap'
+                }}
+                dangerouslySetInnerHTML={{ __html: selectedJob.description || 'No description available for this listing.' }}
+              />
+            </div>
+
+            <div className="flex gap-4 sticky bottom-0 bg-black/80 backdrop-blur-md p-4 -mx-6 -mb-6 border-t border-white/10">
+              <a 
+                href={selectedJob.job_url} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="btn btn-primary flex-1 justify-center"
+              >
+                Apply on {selectedJob.source || selectedJob.site} <ExternalLink size={18} />
+              </a>
+              <button onClick={() => setSelectedJob(null)} className="btn btn-secondary">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
