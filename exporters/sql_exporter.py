@@ -38,22 +38,41 @@ def export_to_cloud_sql(df: pd.DataFrame, table_name: str = "jobs"):
                 engine_url = f"mysql+pymysql://{db_user}:{db_pass}@/{db_name}?unix_socket=/cloudsql/{instance_conn_name}"
         else:
             if db_type == "postgresql":
-                engine_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+                engine_url = f"postgresql+pg8000://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
             else:
                 engine_url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
             
         engine = create_engine(engine_url)
         
-        # We need to make sure lists/dicts are strings for SQL
+        # Prepare data: convert objects to strings
         df_sql = df.copy()
         for col in df_sql.columns:
             if df_sql[col].dtype == 'object':
                 df_sql[col] = df_sql[col].astype(str)
-                
-        # To avoid duplicates in SQL, you could implement an upsert or just append.
-        # For simplicity, we append.
-        df_sql.to_sql(table_name, engine, if_exists="append", index=False)
-        console.print(f"[green]☁️ Successfully exported {len(df_sql)} jobs to Cloud SQL table '{table_name}'.[/]")
+
+        # Custom insertion with ON CONFLICT DO NOTHING for PostgreSQL
+        if db_type == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert
+            from sqlalchemy import Table, MetaData
+            
+            metadata = MetaData()
+            # Reflect the table schema
+            table = Table(table_name, metadata, autoload_with=engine)
+            
+            with engine.connect() as conn:
+                records = df_sql.to_dict(orient='records')
+                stmt = insert(table).values(records)
+                # This is the magic: skip if job_url already exists
+                upsert_stmt = stmt.on_conflict_do_nothing(index_elements=['job_url'])
+                conn.execute(upsert_stmt)
+                conn.commit()
+            
+            console.print(f"[green]☁️ Successfully synchronized {len(df_sql)} jobs (skipped duplicates).[/]")
+        else:
+            # Fallback for non-postgres if needed, but we use postgres
+            df_sql.to_sql(table_name, engine, if_exists="append", index=False)
+            console.print(f"[green]☁️ Successfully exported {len(df_sql)} jobs to Cloud SQL.[/]")
+            
         return True
     except Exception as e:
         console.print(f"[red]✗ Failed to export to Cloud SQL: {str(e)}[/]")

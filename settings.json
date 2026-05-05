@@ -1,0 +1,12 @@
+{
+    "enabled_platforms": [
+        "linkedin",
+        "indeed",
+        "glassdoor",
+        "naukri",
+        "foundit"
+    ],
+    "lookback_period_hours": 160,
+    "max_results_per_scrape": 10000,
+    "scraping_interval_hours": 48
+}
