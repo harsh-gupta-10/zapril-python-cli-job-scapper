@@ -613,35 +613,25 @@ function App() {
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && newCity.trim()) {
                       setCitiesConfig([...citiesConfig, newCity.trim()]);
+                      setCitiesConfig([...citiesConfig, { name: newCity.trim(), enabled: true }]);
                       setNewCity('');
                     }
                   }}
                 />
                 <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '0.8rem' }}
+                  className="btn btn-primary" 
                   onClick={() => {
                     if (newCity.trim()) {
                       setCitiesConfig([...citiesConfig, { name: newCity.trim(), enabled: true }]);
                       setNewCity('');
                     }
                   }}
+                  style={{ borderRadius: '0 8px 8px 0' }}
                 >
                   <Plus size={18} />
                 </button>
               </div>
 
-              <div style={{ flex: 1, maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '0.5rem' }}>
-                {citiesConfig.map((city, idx) => (
-                  <div 
-                    key={idx} 
-                    draggable
-                    onDragStart={(e) => { e.dataTransfer.setData("idx", idx); e.dataTransfer.setData("type", "city"); }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      const fromIdx = parseInt(e.dataTransfer.getData("idx"));
-                      const type = e.dataTransfer.getData("type");
-                      if (type !== "city") return;
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
                 {citiesConfig.map((city, index) => (
                   <div key={index} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5 hover:border-purple-500/30 transition-colors">
@@ -1109,7 +1099,12 @@ function App() {
               <div className="p-4 bg-white/5 rounded-xl border border-white/10">
                 <div className="text-xs uppercase text-muted mb-1">Date Posted</div>
                 <div className="text-main font-bold">
-                  {new Date(selectedJob.date_posted).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                  {(() => {
+                    const d = new Date(selectedJob.date_posted);
+                    return isNaN(d.getTime()) 
+                      ? (selectedJob.date_posted || 'Recently') 
+                      : d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+                  })()}
                 </div>
               </div>
             </div>
