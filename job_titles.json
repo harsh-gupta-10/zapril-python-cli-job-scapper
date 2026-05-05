@@ -1,0 +1,6 @@
+[
+    {"name": "Software Engineer", "enabled": true},
+    {"name": "Frontend Developer", "enabled": true},
+    {"name": "Backend Developer", "enabled": true},
+    {"name": "Designer", "enabled": false}
+]

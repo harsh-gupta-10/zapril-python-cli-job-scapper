@@ -3,7 +3,8 @@ import axios from 'axios';
 import { 
   Briefcase, MapPin, Building2, LayoutDashboard, LogOut, Search, 
   ExternalLink, Database, Calendar, RefreshCw, Download, 
-  TrendingUp, Play, Settings, TerminalSquare, Plus, Trash2, Save
+  TrendingUp, Play, Settings, TerminalSquare, Plus, Trash2, Save,
+  GripVertical, ToggleLeft, ToggleRight, Eye, EyeOff
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, 
@@ -26,10 +27,13 @@ function App() {
 
   // Settings State
   const [settings, setSettings] = useState({
-    scraping_interval_hours: 48,
+    scraping_interval_hours: 24,
     lookback_period_hours: 48,
-    max_results_per_scrape: 10,
-    enabled_platforms: ["linkedin", "indeed", "glassdoor", "naukri", "foundit"]
+    max_results_per_scrape: 20,
+    phased_scraping: true,
+    jobs_per_phase: 3,
+    cities_per_phase: 3,
+    enabled_platforms: ["linkedin", "indeed", "glassdoor", "naukri", "foundit", "internshala", "google"]
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -117,8 +121,8 @@ function App() {
     setTriggering(true);
     try {
       await axios.post('/api/scraper/trigger-custom', { 
-        city: customCity, 
-        job_title: customJobTitle,
+        location: customCity, 
+        search: customJobTitle,
         max_results: customMaxResults,
         hours_old: customHoursOld
       });
@@ -598,7 +602,7 @@ function App() {
                   style={{ padding: '0.8rem' }}
                   onClick={() => {
                     if (newCity.trim()) {
-                      setCitiesConfig([...citiesConfig, newCity.trim()]);
+                      setCitiesConfig([...citiesConfig, { name: newCity.trim(), enabled: true }]);
                       setNewCity('');
                     }
                   }}
@@ -609,14 +613,54 @@ function App() {
 
               <div style={{ flex: 1, maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '0.5rem' }}>
                 {citiesConfig.map((city, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-glass)' }}>
-                    <span>{city}</span>
-                    <button 
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                      onClick={() => setCitiesConfig(citiesConfig.filter((_, i) => i !== idx))}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <div 
+                    key={idx} 
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData("idx", idx); e.dataTransfer.setData("type", "city"); }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      const fromIdx = parseInt(e.dataTransfer.getData("idx"));
+                      const type = e.dataTransfer.getData("type");
+                      if (type !== "city") return;
+                      const newList = [...citiesConfig];
+                      const [moved] = newList.splice(fromIdx, 1);
+                      newList.splice(idx, 0, moved);
+                      setCitiesConfig(newList);
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem 1rem', 
+                      borderBottom: '1px solid var(--border-glass)',
+                      cursor: 'grab',
+                      transition: 'background 0.2s',
+                      background: city.enabled ? 'transparent' : 'rgba(255,255,255,0.05)',
+                      opacity: city.enabled ? 1 : 0.6
+                    }}
+                    className="hover:bg-white/5"
+                  >
+                    <GripVertical size={16} className="text-gray-500" />
+                    <span style={{ flex: 1, textDecoration: city.enabled ? 'none' : 'line-through' }}>{city.name || city}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', color: city.enabled ? '#4ade80' : '#94a3b8', cursor: 'pointer' }}
+                        onClick={() => {
+                          const newList = [...citiesConfig];
+                          newList[idx] = { ...newList[idx], enabled: !newList[idx].enabled };
+                          setCitiesConfig(newList);
+                        }}
+                        title={city.enabled ? "Disable" : "Enable"}
+                      >
+                        {city.enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                      </button>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                        onClick={() => setCitiesConfig(citiesConfig.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -656,7 +700,7 @@ function App() {
                   style={{ padding: '0.8rem' }}
                   onClick={() => {
                     if (newJobTitle.trim()) {
-                      setJobTitlesConfig([...jobTitlesConfig, newJobTitle.trim()]);
+                      setJobTitlesConfig([...jobTitlesConfig, { name: newJobTitle.trim(), enabled: true }]);
                       setNewJobTitle('');
                     }
                   }}
@@ -667,14 +711,54 @@ function App() {
 
               <div style={{ flex: 1, maxHeight: '400px', overflowY: 'auto', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '0.5rem' }}>
                 {jobTitlesConfig.map((role, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-glass)' }}>
-                    <span>{role}</span>
-                    <button 
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                      onClick={() => setJobTitlesConfig(jobTitlesConfig.filter((_, i) => i !== idx))}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <div 
+                    key={idx} 
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData("idx", idx); e.dataTransfer.setData("type", "role"); }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      const fromIdx = parseInt(e.dataTransfer.getData("idx"));
+                      const type = e.dataTransfer.getData("type");
+                      if (type !== "role") return;
+                      const newList = [...jobTitlesConfig];
+                      const [moved] = newList.splice(fromIdx, 1);
+                      newList.splice(idx, 0, moved);
+                      setJobTitlesConfig(newList);
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem 1rem', 
+                      borderBottom: '1px solid var(--border-glass)',
+                      cursor: 'grab',
+                      transition: 'background 0.2s',
+                      background: role.enabled ? 'transparent' : 'rgba(255,255,255,0.05)',
+                      opacity: role.enabled ? 1 : 0.6
+                    }}
+                    className="hover:bg-white/5"
+                  >
+                    <GripVertical size={16} className="text-gray-500" />
+                    <span style={{ flex: 1, textDecoration: role.enabled ? 'none' : 'line-through' }}>{role.name || role}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', color: role.enabled ? '#4ade80' : '#94a3b8', cursor: 'pointer' }}
+                        onClick={() => {
+                          const newList = [...jobTitlesConfig];
+                          newList[idx] = { ...newList[idx], enabled: !newList[idx].enabled };
+                          setJobTitlesConfig(newList);
+                        }}
+                        title={role.enabled ? "Disable" : "Enable"}
+                      >
+                        {role.enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                      </button>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                        onClick={() => setJobTitlesConfig(jobTitlesConfig.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -694,7 +778,7 @@ function App() {
                 <h3 style={{ fontSize: '1.25rem', fontWeight: '600' }}>Advanced Settings</h3>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
                 <div className="input-group">
                   <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Scraping Interval (Hours)</label>
                   <input 
@@ -712,7 +796,7 @@ function App() {
                   />
                 </div>
                 <div className="input-group">
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Max Results Per Scrape</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Max Results Per Combination</label>
                   <input 
                     type="number" 
                     value={settings.max_results_per_scrape}
@@ -721,10 +805,49 @@ function App() {
                 </div>
               </div>
 
+              <div style={{ padding: '1.25rem', background: 'rgba(139, 92, 246, 0.05)', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: '12px', marginBottom: '1.5rem' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#a78bfa' }}>
+                  <TrendingUp size={18} /> Phased Scraping Strategy
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={settings.phased_scraping}
+                      onChange={(e) => setSettings({...settings, phased_scraping: e.target.checked})}
+                    />
+                    <span>Enable Phased Execution</span>
+                  </label>
+                  <div className="input-group">
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Jobs per phase</label>
+                    <input 
+                      type="number" 
+                      value={settings.jobs_per_phase}
+                      onChange={(e) => setSettings({...settings, jobs_per_phase: parseInt(e.target.value) || 3})}
+                      disabled={!settings.phased_scraping}
+                      style={{ padding: '0.5rem' }}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Cities per phase</label>
+                    <input 
+                      type="number" 
+                      value={settings.cities_per_phase}
+                      onChange={(e) => setSettings({...settings, cities_per_phase: parseInt(e.target.value) || 3})}
+                      disabled={!settings.phased_scraping}
+                      style={{ padding: '0.5rem' }}
+                    />
+                  </div>
+                </div>
+                <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Phased execution processes a small subset of job/city combinations per run to prevent server overload and anti-bot detection.
+                </p>
+              </div>
+
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Enabled Platforms</label>
                 <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  {["linkedin", "indeed", "glassdoor", "naukri", "foundit"].map(platform => (
+                  {["linkedin", "indeed", "glassdoor", "naukri", "foundit", "internshala", "google"].map(platform => (
                     <label key={platform} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                       <input 
                         type="checkbox" 

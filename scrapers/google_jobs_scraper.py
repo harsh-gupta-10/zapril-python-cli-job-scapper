@@ -11,6 +11,7 @@ import json
 import time
 import pandas as pd
 from datetime import datetime, timedelta
+from processors.date_parser import parse_relative_date
 from rich.console import Console
 from rich.progress import (
     Progress,
@@ -282,9 +283,9 @@ def _parse_json_ld_job(data: dict, location: str) -> dict | None:
             "location": job_location,
             "salary": "",
             "job_type": data.get("employmentType", ""),
-            "date_posted": date_posted,
+            "date_posted": parse_relative_date(date_posted),
             "job_url": data.get("url", ""),
-            "description": str(data.get("description", ""))[:500],
+            "description": str(data.get("description", "")),
         }
     except Exception:
         return None
@@ -377,7 +378,9 @@ def _filter_by_age(listings: list[dict], hours_old: int) -> list[dict]:
             filtered.append(listing)
             continue
         try:
-            posted = datetime.strptime(date_str, "%Y-%m-%d")
+            # Normalize date first
+            normalized_date = parse_relative_date(date_str)
+            posted = datetime.strptime(normalized_date, "%Y-%m-%d")
             if posted >= cutoff:
                 filtered.append(listing)
         except (ValueError, TypeError):

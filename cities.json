@@ -1,0 +1,6 @@
+[
+    {"name": "Mumbai", "enabled": true},
+    {"name": "Bangalore", "enabled": true},
+    {"name": "Delhi", "enabled": true},
+    {"name": "Pune", "enabled": false}
+]

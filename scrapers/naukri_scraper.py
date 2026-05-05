@@ -10,6 +10,7 @@ import json
 import time
 import pandas as pd
 from datetime import datetime, timedelta
+from processors.date_parser import parse_relative_date
 from rich.console import Console
 from rich.progress import (
     Progress,
@@ -261,7 +262,7 @@ def _parse_api_job(job: dict) -> dict | None:
             "job_type": job.get("jobType", "").lower() if job.get("jobType") else "",
             "date_posted": _normalize_api_date(created),
             "job_url": job_url,
-            "description": " | ".join(desc_parts) if desc_parts else "",
+            "description": job.get("jobDescription", " | ".join(desc_parts)) if job.get("jobDescription") else (" | ".join(desc_parts) if desc_parts else ""),
         }
 
     except Exception:
@@ -379,20 +380,6 @@ def _normalize_api_date(date_val) -> str:
             return ""
 
     if isinstance(date_val, str):
-        text = date_val.lower().strip()
-        today = datetime.now()
-
-        if "today" in text or "just now" in text:
-            return today.strftime("%Y-%m-%d")
-
-        days_match = re.search(r"(\d+)\s*day", text)
-        if days_match:
-            return (today - timedelta(days=int(days_match.group(1)))).strftime("%Y-%m-%d")
-
-        # Try parsing ISO date
-        try:
-            return datetime.fromisoformat(date_val.replace("Z", "+00:00")).strftime("%Y-%m-%d")
-        except (ValueError, TypeError):
-            pass
+        return parse_relative_date(date_val)
 
     return str(date_val)

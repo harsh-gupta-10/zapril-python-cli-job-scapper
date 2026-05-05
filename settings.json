@@ -1,12 +1,17 @@
 {
-    "scraping_interval_hours": 48,
-    "lookback_period_hours": 336,
-    "max_results_per_scrape": 10000,
+    "scraping_interval_hours": 24,
+    "lookback_period_hours": 48,
+    "max_results_per_scrape": 20,
+    "phased_scraping": true,
+    "jobs_per_phase": 3,
+    "cities_per_phase": 3,
     "enabled_platforms": [
         "linkedin",
         "indeed",
         "glassdoor",
         "naukri",
-        "foundit"
+        "foundit",
+        "internshala",
+        "google"
     ]
 }
