@@ -1,6 +1,158 @@
 [
-    {"name": "Software Engineer", "enabled": true},
-    {"name": "Frontend Developer", "enabled": true},
-    {"name": "Backend Developer", "enabled": true},
-    {"name": "Designer", "enabled": false}
+    {
+        "name": "HR Manager",
+        "enabled": false
+    },
+    {
+        "name": "Recruiter",
+        "enabled": false
+    },
+    {
+        "name": "Talent Acquisition Specialist",
+        "enabled": false
+    },
+    {
+        "name": "Accountant",
+        "enabled": true
+    },
+    {
+        "name": "Financial Analyst",
+        "enabled": true
+    },
+    {
+        "name": "Sales Executive",
+        "enabled": true
+    },
+    {
+        "name": "Business Development Manager",
+        "enabled": true
+    },
+    {
+        "name": "Marketing Manager",
+        "enabled": true
+    },
+    {
+        "name": "SEO Specialist",
+        "enabled": true
+    },
+    {
+        "name": "Social Media Manager",
+        "enabled": true
+    },
+    {
+        "name": "Content Writer",
+        "enabled": true
+    },
+    {
+        "name": "Operations Manager",
+        "enabled": true
+    },
+    {
+        "name": "Customer Support Representative",
+        "enabled": true
+    },
+    {
+        "name": "Customer Success Manager",
+        "enabled": true
+    },
+    {
+        "name": "Office Administrator",
+        "enabled": true
+    },
+    {
+        "name": "Supply Chain Coordinator",
+        "enabled": true
+    },
+    {
+        "name": "Legal Counsel",
+        "enabled": true
+    },
+    {
+        "name": "Compliance Officer",
+        "enabled": true
+    },
+    {
+        "name": "Software Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Frontend Developer",
+        "enabled": true
+    },
+    {
+        "name": "Backend Developer",
+        "enabled": true
+    },
+    {
+        "name": "Full Stack Developer",
+        "enabled": true
+    },
+    {
+        "name": "UI/UX Designer",
+        "enabled": true
+    },
+    {
+        "name": "Product Manager",
+        "enabled": true
+    },
+    {
+        "name": "Data Analyst",
+        "enabled": true
+    },
+    {
+        "name": "Project Manager",
+        "enabled": true
+    },
+    {
+        "name": "QA Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Cybersecurity Analyst",
+        "enabled": true
+    },
+    {
+        "name": "Graphic Designer",
+        "enabled": true
+    },
+    {
+        "name": "Digital Marketing Executive",
+        "enabled": true
+    },
+    {
+        "name": "Mechanical Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Civil Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Electrical Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Sales Manager",
+        "enabled": true
+    },
+    {
+        "name": "Bank Manager",
+        "enabled": true
+    },
+    {
+        "name": "Video editor",
+        "enabled": true
+    },
+    {
+        "name": "Iot",
+        "enabled": true
+    },
+    {
+        "name": "embbeded",
+        "enabled": true
+    },
+    {
+        "name": "Founder",
+        "enabled": true
+    }
 ]

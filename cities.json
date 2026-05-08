@@ -1,6 +1,210 @@
 [
-    {"name": "Mumbai", "enabled": true},
-    {"name": "Bangalore", "enabled": true},
-    {"name": "Delhi", "enabled": true},
-    {"name": "Pune", "enabled": false}
+    {
+        "name": "Mumbai",
+        "enabled": true
+    },
+    {
+        "name": "Navi Mumbai",
+        "enabled": true
+    },
+    {
+        "name": "Thane",
+        "enabled": true
+    },
+    {
+        "name": "Bangalore",
+        "enabled": false
+    },
+    {
+        "name": "New Delhi",
+        "enabled": false
+    },
+    {
+        "name": "Hyderabad",
+        "enabled": false
+    },
+    {
+        "name": "Pune",
+        "enabled": true
+    },
+    {
+        "name": "Chennai",
+        "enabled": false
+    },
+    {
+        "name": "Kolkata",
+        "enabled": false
+    },
+    {
+        "name": "Ahmedabad",
+        "enabled": false
+    },
+    {
+        "name": "Gurgaon",
+        "enabled": false
+    },
+    {
+        "name": "Noida",
+        "enabled": false
+    },
+    {
+        "name": "Jaipur",
+        "enabled": false
+    },
+    {
+        "name": "Chandigarh",
+        "enabled": false
+    },
+    {
+        "name": "Lucknow",
+        "enabled": false
+    },
+    {
+        "name": "Indore",
+        "enabled": false
+    },
+    {
+        "name": "Kochi",
+        "enabled": false
+    },
+    {
+        "name": "Thiruvananthapuram",
+        "enabled": false
+    },
+    {
+        "name": "Bhopal",
+        "enabled": false
+    },
+    {
+        "name": "Visakhapatnam",
+        "enabled": false
+    },
+    {
+        "name": "Surat",
+        "enabled": false
+    },
+    {
+        "name": "Nagpur",
+        "enabled": false
+    },
+    {
+        "name": "Patna",
+        "enabled": false
+    },
+    {
+        "name": "Ludhiana",
+        "enabled": false
+    },
+    {
+        "name": "Agra",
+        "enabled": false
+    },
+    {
+        "name": "Nashik",
+        "enabled": false
+    },
+    {
+        "name": "Vadodara",
+        "enabled": false
+    },
+    {
+        "name": "Rajkot",
+        "enabled": false
+    },
+    {
+        "name": "Varanasi",
+        "enabled": false
+    },
+    {
+        "name": "Srinagar",
+        "enabled": false
+    },
+    {
+        "name": "Aurangabad",
+        "enabled": false
+    },
+    {
+        "name": "Dhanbad",
+        "enabled": false
+    },
+    {
+        "name": "Amritsar",
+        "enabled": false
+    },
+    {
+        "name": "Ranchi",
+        "enabled": false
+    },
+    {
+        "name": "Howrah",
+        "enabled": false
+    },
+    {
+        "name": "Jabalpur",
+        "enabled": false
+    },
+    {
+        "name": "Gwalior",
+        "enabled": false
+    },
+    {
+        "name": "Vijayawada",
+        "enabled": false
+    },
+    {
+        "name": "Jodhpur",
+        "enabled": false
+    },
+    {
+        "name": "Madurai",
+        "enabled": false
+    },
+    {
+        "name": "Raipur",
+        "enabled": false
+    },
+    {
+        "name": "Kota",
+        "enabled": false
+    },
+    {
+        "name": "Guwahati",
+        "enabled": false
+    },
+    {
+        "name": "Solapur",
+        "enabled": false
+    },
+    {
+        "name": "Hubli-Dharwad",
+        "enabled": false
+    },
+    {
+        "name": "Bareilly",
+        "enabled": false
+    },
+    {
+        "name": "Mysore",
+        "enabled": false
+    },
+    {
+        "name": "Tiruchirappalli",
+        "enabled": false
+    },
+    {
+        "name": "Tiruppur",
+        "enabled": false
+    },
+    {
+        "name": "Moradabad",
+        "enabled": false
+    },
+    {
+        "name": "Salem",
+        "enabled": false
+    },
+    {
+        "name": "Aligarh",
+        "enabled": false
+    }
 ]

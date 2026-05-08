@@ -113,6 +113,16 @@ class LocationResolver:
                             df.at[idx, "location_status"] = "different_city"
                             df.at[idx, "resolved_location"] = location_val
 
+                    # Add company intelligence if available in cache (now a dict)
+                    cache_key = company.strip().lower()
+                    if cache_key in self.cache:
+                        cached = self.cache[cache_key]
+                        if isinstance(cached, dict):
+                            if "employees" in cached and cached["employees"]:
+                                df.at[idx, "company_size"] = cached["employees"]
+                            if "industry" in cached and cached["industry"]:
+                                df.at[idx, "company_industry"] = cached["industry"]
+
                 progress.advance(task)
 
             progress.update(
@@ -149,35 +159,45 @@ class LocationResolver:
         cache_key = clean_name.lower()
         if cache_key in self.cache:
             self._cache_hits += 1
-            return self.cache[cache_key]
+            cached = self.cache[cache_key]
+            if isinstance(cached, dict):
+                return cached.get("location", "")
+            return cached
+
+        # Prepare dict for new cache format
+        company_info = {"location": "", "employees": "", "industry": ""}
 
         # 2. Try Wikipedia
         location = self._lookup_wikipedia(clean_name)
         if location:
-            self.cache[cache_key] = location
+            company_info["location"] = location
+            self.cache[cache_key] = company_info
             self._resolved_count += 1
             return location
 
         time.sleep(0.5)
 
         # 3. Try Wikidata SPARQL
-        location = self._lookup_wikidata(clean_name)
-        if location:
-            self.cache[cache_key] = location
-            self._resolved_count += 1
-            return location
+        wiki_info = self._lookup_wikidata_full(clean_name)
+        if wiki_info and (wiki_info.get("location") or wiki_info.get("employees")):
+            company_info.update(wiki_info)
+            self.cache[cache_key] = company_info
+            if company_info["location"]:
+                self._resolved_count += 1
+            return company_info["location"]
 
         time.sleep(0.5)
 
         # 4. Try Google search (scrape knowledge panel)
         location = self._lookup_google(clean_name)
         if location:
-            self.cache[cache_key] = location
+            company_info["location"] = location
+            self.cache[cache_key] = company_info
             self._resolved_count += 1
             return location
 
         # Cache the miss too (so we don't retry)
-        self.cache[cache_key] = ""
+        self.cache[cache_key] = company_info
         return ""
 
     # ─── Location Helpers ─────────────────────────────────────────
@@ -285,19 +305,22 @@ class LocationResolver:
 
     # ─── Wikidata SPARQL Lookup ───────────────────────────────────
 
-    def _lookup_wikidata(self, company_name: str) -> str:
+    def _lookup_wikidata_full(self, company_name: str) -> dict:
         """
-        Query Wikidata SPARQL to find the company's HQ city.
+        Query Wikidata SPARQL to find the company's HQ city, employees, and industry.
         """
         query = """
-        SELECT ?hqLabel WHERE {
+        SELECT ?hqLabel ?employees ?industryLabel WHERE {
           ?company rdfs:label "%s"@en .
-          ?company wdt:P159 ?hq .
+          OPTIONAL { ?company wdt:P159 ?hq . }
+          OPTIONAL { ?company wdt:P1128 ?employees . }
+          OPTIONAL { ?company wdt:P452 ?industry . }
           SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
         }
         LIMIT 1
         """ % company_name.replace('"', '\\"')
 
+        result = {"location": "", "employees": "", "industry": ""}
         try:
             resp = _session.get(
                 WIKIDATA_SPARQL_URL,
@@ -309,12 +332,16 @@ class LocationResolver:
                 data = resp.json()
                 bindings = data.get("results", {}).get("bindings", [])
                 if bindings:
-                    return bindings[0].get("hqLabel", {}).get("value", "")
+                    row = bindings[0]
+                    result["location"] = row.get("hqLabel", {}).get("value", "")
+                    result["employees"] = row.get("employees", {}).get("value", "")
+                    result["industry"] = row.get("industryLabel", {}).get("value", "")
+                    return result
 
         except requests.RequestException:
             pass
 
-        return ""
+        return result
 
     # ─── Google Search Fallback ───────────────────────────────────
 
@@ -403,7 +430,8 @@ class LocationResolver:
         target_canonical = self._canonicalize_city(target_location)
         companies = []
 
-        for company, location in self.cache.items():
+        for company, cached in self.cache.items():
+            location = cached.get("location", "") if isinstance(cached, dict) else cached
             if location:
                 loc_canonical = self._canonicalize_city(location)
                 if loc_canonical == target_canonical:

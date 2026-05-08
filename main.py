@@ -8,9 +8,20 @@ Features intelligent location resolution and fuzzy deduplication.
 
 import argparse
 import sys
+import os
 import time
+import signal
 import pandas as pd
 from pathlib import Path
+
+# Fix Windows console encoding — Rich uses emoji that crash cp1252
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 from rich.console import Console
 from rich.panel import Panel
@@ -159,6 +170,16 @@ Examples:
         action="store_true",
         help="Skip Google Jobs scraping",
     )
+    parser.add_argument(
+        "--resume-state",
+        action="store_true",
+        help="Resume from partial state file if it matches the current job/city",
+    )
+    parser.add_argument(
+        "--skip-ai",
+        action="store_true",
+        help="Skip AI description enhancement (saves tokens)",
+    )
 
     return parser.parse_args()
 
@@ -218,96 +239,209 @@ def main():
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
+    # State tracking
+    import json
+    state_file = Path(CACHE_DIR) / "platform_state.json"
+    platform_state = {"job": search_term, "city": args.location, "completed": [], "failed": []}
+
+    if args.resume_state and state_file.exists():
+        try:
+            with open(state_file, "r", encoding="utf-8") as f:
+                saved_state = json.load(f)
+                if saved_state.get("job") == search_term and saved_state.get("city") == args.location:
+                    platform_state = saved_state
+                    completed = saved_state.get("completed", [])
+                    if completed:
+                        console.print(f"[bold green]Resuming... Skipping completed platforms: {', '.join(completed)}[/]")
+                        platforms = [p for p in platforms if p not in completed]
+                        jobspy_platforms = [p for p in jobspy_platforms if p not in completed]
+                        if "naukri" in completed: scrape_naukri = False
+                        if "google" in completed: scrape_google = False
+                        if "glassdoor" in completed: scrape_glassdoor = False
+                        if "internshala" in completed: scrape_internshala = False
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not read state file: {e}[/]")
+
+    def save_platform_state():
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(platform_state, f, indent=4)
+
+    save_platform_state()
+    
+    import datetime
+    paused_file = Path(CACHE_DIR) / "paused_platforms.json"
+    paused_platforms = {}
+    if paused_file.exists():
+        try:
+            with open(paused_file, "r", encoding="utf-8") as f:
+                paused_platforms = json.load(f)
+        except Exception:
+            pass
+            
+    now = datetime.datetime.now()
+    active_pauses = {}
+    for p, until_str in paused_platforms.items():
+        try:
+            until = datetime.datetime.fromisoformat(until_str)
+            if now < until:
+                active_pauses[p] = until_str
+        except Exception:
+            pass
+    paused_platforms = active_pauses
+
+    def save_pauses():
+        with open(paused_file, "w", encoding="utf-8") as f:
+            json.dump(paused_platforms, f, indent=4)
+
+    stop_requested = False
+
+    def should_stop():
+        nonlocal stop_requested
+        if stop_requested:
+            return True
+        if os.path.exists(os.path.join(CACHE_DIR, "stop_scraper.flag")):
+            console.print("\n[bold yellow]⚠️ Stop flag detected. Initiating graceful shutdown...[/]")
+            return True
+        return False
+
     # ═══════════════════════════════════════════════════════════════
     # PHASE 1: SCRAPING
     # ═══════════════════════════════════════════════════════════════
     console.rule("[bold cyan]Phase 1: Scraping", style="cyan")
     console.print()
 
+    # Custom SIGINT handler for Graceful Stop with Double Confirmation
+    def handle_sigint(signum, frame):
+        nonlocal stop_requested
+        # If not running interactively, just set flag
+        if not sys.stdout.isatty():
+            console.print("\n[bold yellow]⚠️ Stop signal received. Initiating graceful shutdown after current platform...[/]")
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            stop_requested = True
+            return
+
+        console.print()
+        console.print("[bold yellow]⚠️ Scraping in progress.[/]")
+        try:
+            ans = input("Are you sure you want to stop? (y/n): ").strip().lower()
+            if ans == 'y':
+                console.print("[bold red]Finishing current platform, then stopping gracefully... Press Ctrl+C again to force quit immediately.[/]")
+                # Restore default so a second Ctrl+C kills immediately
+                signal.signal(signal.SIGINT, signal.SIG_DFL)
+                stop_requested = True
+            else:
+                console.print("[bold green]Resuming scrape...[/]")
+        except EOFError:
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            stop_requested = True
+
+    # Install the signal handler
+    signal.signal(signal.SIGINT, handle_sigint)
+
     all_jobs = pd.DataFrame()
     start_time = time.time()
 
-    # ── Scrape via JobSpy ─────────────────────────────────────────
-    if jobspy_platforms:
-        from scrapers.jobspy_scraper import scrape_with_jobspy
+    try:
 
-        jobspy_results = scrape_with_jobspy(
-            search_term=search_term,
-            location=args.location,
-            platforms=jobspy_platforms,
-            max_results=args.max_results,
-            hours_old=args.hours_old,
-            job_type=args.job_type,
-            is_remote=args.remote,
-            proxies=args.proxy,
-            verbose=args.verbose,
-        )
+        # ── Scrape Platforms Individually ──────────────────────────────
+        for platform in platforms:
+            if should_stop():
+                console.print("\n[bold red]⚠️ Stop requested! Proceeding to deduplicate and export gathered data so far...[/]")
+                break
 
-        if not jobspy_results.empty:
-            all_jobs = pd.concat([all_jobs, jobspy_results], ignore_index=True)
+            if platform in platform_state.get("completed", []):
+                continue
+                
+            if platform in paused_platforms:
+                until_str = paused_platforms[platform]
+                until_dt = datetime.datetime.fromisoformat(until_str)
+                minutes_left = int((until_dt - datetime.datetime.now()).total_seconds() / 60)
+                console.print(f"[yellow]⏭ Skipping {platform} (Paused for {minutes_left} more mins due to previous bans)[/]")
+                continue
+            
+            try:
+                results = pd.DataFrame()
+                if platform in JOBSPY_PLATFORMS:
+                    from scrapers.jobspy_scraper import scrape_with_jobspy
+                    results = scrape_with_jobspy(
+                        search_term=search_term,
+                        location=args.location,
+                        platforms=[platform],
+                        max_results=args.max_results,
+                        hours_old=args.hours_old,
+                        job_type=args.job_type,
+                        is_remote=args.remote,
+                        proxies=args.proxy,
+                        verbose=args.verbose,
+                    )
+                elif platform == "naukri" and scrape_naukri:
+                    console.print()
+                    from scrapers.naukri_scraper import scrape_naukri as _scrape_naukri
+                    results = _scrape_naukri(
+                        search_term=search_term,
+                        location=args.location,
+                        max_results=args.max_results,
+                        hours_old=args.hours_old,
+                        job_type=args.job_type,
+                    )
+                elif platform == "google" and scrape_google:
+                    console.print()
+                    from scrapers.google_jobs_scraper import scrape_google_jobs as _scrape_google
+                    results = _scrape_google(
+                        search_term=search_term,
+                        location=args.location,
+                        max_results=args.max_results,
+                        hours_old=args.hours_old,
+                        job_type=args.job_type,
+                    )
+                elif platform == "glassdoor" and scrape_glassdoor:
+                    console.print()
+                    from scrapers.glassdoor_scraper import scrape_glassdoor as _scrape_glassdoor
+                    results = _scrape_glassdoor(
+                        search_term=search_term,
+                        location=args.location,
+                        max_results=args.max_results,
+                        hours_old=args.hours_old,
+                        job_type=args.job_type,
+                    )
+                elif platform == "internshala" and scrape_internshala:
+                    console.print()
+                    from scrapers.internshala_scraper import scrape_internshala as _scrape_internshala
+                    results = _scrape_internshala(
+                        search_term=search_term,
+                        location=args.location,
+                        max_results=args.max_results,
+                        include_internships=(args.job_type in (None, "internship")),
+                    )
+                    
+                if not results.empty:
+                    all_jobs = pd.concat([all_jobs, results], ignore_index=True)
+                    
+                platform_state.setdefault("completed", []).append(platform)
+                save_platform_state()
+                
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                err_str = str(e).lower()
+                is_ban = any(x in err_str for x in ["429", "403", "captcha", "blocked", "banned", "too many requests"])
+                if is_ban:
+                    console.print(f"[red]✗ {platform} blocked us! Pausing this platform for 1 hour.[/]")
+                    until = (datetime.datetime.now() + datetime.timedelta(hours=1)).isoformat()
+                    paused_platforms[platform] = until
+                    save_pauses()
+                else:
+                    console.print(f"[red]Error scraping {platform}: {e}[/]")
+                
+                platform_state.setdefault("failed", []).append(platform)
+                save_platform_state()
 
-    # ── Scrape Naukri (Playwright) ────────────────────────────────
-    if scrape_naukri:
-        console.print()
-        from scrapers.naukri_scraper import scrape_naukri as _scrape_naukri
-
-        naukri_results = _scrape_naukri(
-            search_term=search_term,
-            location=args.location,
-            max_results=args.max_results,
-            hours_old=args.hours_old,
-            job_type=args.job_type,
-        )
-
-        if not naukri_results.empty:
-            all_jobs = pd.concat([all_jobs, naukri_results], ignore_index=True)
-
-    # ── Scrape Google Jobs (Playwright) ───────────────────────────
-    if scrape_google:
-        console.print()
-        from scrapers.google_jobs_scraper import scrape_google_jobs as _scrape_google
-
-        google_results = _scrape_google(
-            search_term=search_term,
-            location=args.location,
-            max_results=args.max_results,
-            hours_old=args.hours_old,
-            job_type=args.job_type,
-        )
-
-        if not google_results.empty:
-            all_jobs = pd.concat([all_jobs, google_results], ignore_index=True)
-
-    # ── Scrape Glassdoor (Playwright) ─────────────────────────────
-    if scrape_glassdoor:
-        console.print()
-        from scrapers.glassdoor_scraper import scrape_glassdoor as _scrape_glassdoor
-
-        glassdoor_results = _scrape_glassdoor(
-            search_term=search_term,
-            location=args.location,
-            max_results=args.max_results,
-            hours_old=args.hours_old,
-            job_type=args.job_type,
-        )
-
-        if not glassdoor_results.empty:
-            all_jobs = pd.concat([all_jobs, glassdoor_results], ignore_index=True)
-
-    # ── Scrape Internshala (Playwright) ───────────────────────────
-    if scrape_internshala:
-        console.print()
-        from scrapers.internshala_scraper import scrape_internshala as _scrape_internshala
-
-        internshala_results = _scrape_internshala(
-            search_term=search_term,
-            location=args.location,
-            max_results=args.max_results,
-            include_internships=(args.job_type in (None, "internship")),
-        )
-
-        if not internshala_results.empty:
-            all_jobs = pd.concat([all_jobs, internshala_results], ignore_index=True)
+    except KeyboardInterrupt:
+        console.print("\n[bold red]⚠️ Scrape phase interrupted! Proceeding to deduplicate and export gathered data so far...[/]")
+        
+    finally:
+        # Restore original signal handler when scraping finishes or is interrupted
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     scrape_time = time.time() - start_time
 
@@ -359,6 +493,22 @@ def main():
         console.print()
 
     # ═══════════════════════════════════════════════════════════════
+    # PHASE 3.5: AI ENHANCEMENT
+    # ═══════════════════════════════════════════════════════════════
+    if not args.skip_ai:
+        console.rule("[bold cyan]Phase 3.5: AI Description Enhancement", style="cyan")
+        console.print()
+
+        from processors.description_improver import DescriptionImprover
+
+        improver = DescriptionImprover()
+        all_jobs = improver.process_dataframe(all_jobs)
+        console.print()
+    else:
+        console.print("[yellow]⏭ AI enrichment skipped (--skip-ai)[/]")
+        console.print()
+
+    # ═══════════════════════════════════════════════════════════════
     # PHASE 4: EXPORT
     # ═══════════════════════════════════════════════════════════════
     console.rule("[bold cyan]Phase 4: Export & Summary", style="cyan")
@@ -382,6 +532,13 @@ def main():
         f"Output: [cyan]{output_path}[/]"
     )
     console.print()
+    
+    # Clear state file on successful full completion
+    if state_file.exists():
+        try:
+            os.remove(state_file)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

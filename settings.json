@@ -1,8 +1,8 @@
 {
-    "scraping_interval_hours": 24,
-    "lookback_period_hours": 160,
-    "max_results_per_scrape": 20,
-    "phased_scraping": true,
+    "scraping_interval_hours": 5,
+    "lookback_period_hours": 360,
+    "max_results_per_scrape": 100,
+    "phased_scraping": false,
     "jobs_per_phase": 3,
     "cities_per_phase": 3,
     "enabled_platforms": [
@@ -13,5 +13,7 @@
         "foundit",
         "internshala",
         "google"
-    ]
+    ],
+    "ai_processing_enabled": false,
+    "max_parallel_searches": 2
 }

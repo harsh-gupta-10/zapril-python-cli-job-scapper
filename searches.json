@@ -1,0 +1,14 @@
+[
+    {
+        "enabled": false,
+        "job_title": "Software Engineer",
+        "location": "New York",
+        "max_results": 20,
+        "name": "Software Engineer in New York",
+        "platforms": [
+            "linkedin",
+            "indeed",
+            "naukri"
+        ]
+    }
+]

@@ -90,7 +90,7 @@ def scrape_with_jobspy(
 
     # Fetch full descriptions for LinkedIn (slower but more data)
     if "linkedin" in site_names:
-        scrape_params["linkedin_fetch_description"] = True
+        scrape_params["linkedin_fetch_description"] = False
 
     # ── Execute the scrape ────────────────────────────────────────
     all_jobs = pd.DataFrame()

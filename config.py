@@ -132,8 +132,11 @@ OUTPUT_COLUMNS = [
     "resolved_location",
     "job_type",
     "salary",
+    "salary_expectation",
     "date_posted",
     "job_url",
+    "skills",
+    "key_takeaways",
     "description",
 ]
 

@@ -26,7 +26,10 @@ import {
   RefreshCw,
   MoreVertical,
   Activity,
-  Calendar
+  Calendar,
+  Square,
+  Zap,
+  Download
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -53,7 +56,9 @@ const App = () => {
     companies: 0,
     cities: 0,
     locations_list: [],
-    sources_list: []
+    sources_list: [],
+    source_stats: [],
+    city_stats: []
   });
   
   // Auth state
@@ -83,8 +88,10 @@ const App = () => {
     phased_scraping: true,
     jobs_per_phase: 3,
     cities_per_phase: 3,
-    enabled_platforms: ['linkedin', 'indeed', 'naukri']
+    enabled_platforms: ['linkedin', 'indeed', 'naukri'],
+    ai_processing_enabled: true
   });
+  const [searchesConfig, setSearchesConfig] = useState([]);
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -94,6 +101,7 @@ const App = () => {
   const [testOutput, setTestOutput] = useState(null);
   const [systemLogs, setSystemLogs] = useState('');
   const [fetchingLogs, setFetchingLogs] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   // Modal state
   const [selectedJob, setSelectedJob] = useState(null);
@@ -103,12 +111,42 @@ const App = () => {
   const [customJobTitle, setCustomJobTitle] = useState('');
   const [customMaxResults, setCustomMaxResults] = useState(10);
 
+  // Pipeline State
+  const [pipelineState, setPipelineState] = useState({
+    is_active: false,
+    status: 'idle',
+    last_job_index: 0,
+    last_city_index: 0,
+    current_job: '',
+    current_city: '',
+    last_updated: ''
+  });
+
   useEffect(() => {
     if (isLoggedIn) {
       fetchData();
       fetchConfig();
+      fetchPipelineState();
     }
   }, [isLoggedIn]);
+
+  // Poll pipeline state
+  useEffect(() => {
+    let interval;
+    if (isLoggedIn) {
+      interval = setInterval(fetchPipelineState, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
+
+  const fetchPipelineState = async () => {
+    try {
+      const res = await axios.get('/api/scraper/status');
+      setPipelineState(res.data || { is_active: false });
+    } catch (error) {
+      console.error('Error fetching pipeline state:', error);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -146,7 +184,7 @@ const App = () => {
       
       const [jobsRes, statsRes] = await Promise.all([
         axios.get('/api/jobs', { params }),
-        axios.get('/api/stats')
+        axios.get('/api/stats', { params: { search: filters.search, location: filters.location, source: filters.source } })
       ]);
       
       if (jobsRes.data && jobsRes.data.jobs) {
@@ -162,7 +200,9 @@ const App = () => {
           companies: statsRes.data.companies || 0,
           cities: statsRes.data.cities || 0,
           locations_list: statsRes.data.locations_list || [],
-          sources_list: statsRes.data.sources_list || []
+          sources_list: statsRes.data.sources_list || [],
+          source_stats: statsRes.data.source_stats || [],
+          city_stats: statsRes.data.city_stats || []
         });
       }
     } catch (error) {
@@ -181,9 +221,10 @@ const App = () => {
 
   const fetchConfig = async () => {
     try {
-      const [citiesRes, jobTitlesRes, settingsRes] = await Promise.all([
+      const [citiesRes, jobTitlesRes, searchesRes, settingsRes] = await Promise.all([
         axios.get('/api/config/cities').catch(() => ({ data: { cities: [] } })),
         axios.get('/api/config/job-titles').catch(() => ({ data: { job_titles: [] } })),
+        axios.get('/api/config/searches').catch(() => ({ data: { searches: [] } })),
         axios.get('/api/settings').catch(() => ({ data: null }))
       ]);
       
@@ -208,6 +249,7 @@ const App = () => {
       
       setCitiesConfig(normalize(cities));
       setJobTitlesConfig(normalize(titles));
+      setSearchesConfig(searchesRes.data?.searches || []);
       
       if (settingsRes.data) {
         setSettings(prev => ({ ...prev, ...settingsRes.data }));
@@ -253,6 +295,18 @@ const App = () => {
     }
   };
 
+  const saveSearches = async () => {
+    setSavingConfig(true);
+    try {
+      await axios.post('/api/config/searches', { searches: searchesConfig });
+      alert('Search architecture updated.');
+    } catch (error) {
+      alert('Error saving searches');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
   const addCity = (cityName) => {
     if (cityName.trim()) {
       setCitiesConfig([...citiesConfig, { name: cityName.trim(), enabled: true }]);
@@ -266,38 +320,25 @@ const App = () => {
   };
 
   const getSourceStats = () => {
-    if (!Array.isArray(jobs)) return [];
-    const counts = {};
-    jobs.forEach(job => {
-      if (job && job.source) {
-        counts[job.source] = (counts[job.source] || 0) + 1;
-      }
-    });
-    return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
+    return stats.source_stats || [];
   };
 
   const getCityStats = () => {
-    if (!Array.isArray(jobs)) return [];
-    const counts = {};
-    jobs.forEach(job => {
-      if (job && job.location) {
-        const city = job.location.split(',')[0].trim();
-        counts[city] = (counts[city] || 0) + 1;
-      }
-    });
-    return Object.keys(counts)
-      .map(key => ({ name: key, count: counts[key] }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+    return stats.city_stats || [];
   };
 
-  const handleTriggerScraper = async () => {
+  const handleTriggerScraper = async (newRun = false) => {
     setTriggering(true);
     try {
-      await axios.post('/api/run-scraper');
-      alert('Full scraping cycle initiated in background.');
+      const res = await axios.get(`/api/run-scraper?new=${newRun}`);
+      if (res.data.status === 'success') {
+        alert(res.data.message);
+        fetchPipelineState();
+      } else {
+        alert(res.data.message || 'Failed to start scraper');
+      }
     } catch (error) {
-      alert('Error triggering scraper');
+      alert(error.response?.data?.message || 'Error triggering scraper');
     } finally {
       setTriggering(false);
     }
@@ -312,6 +353,34 @@ const App = () => {
       console.error('Error fetching logs');
     } finally {
       setFetchingLogs(false);
+    }
+  };
+
+  const handleStopScraper = async () => {
+    if (!window.confirm('Gracefully stop the scraper? It will finish the current task and exit.')) return;
+    setStopping(true);
+    try {
+      const res = await axios.post('/api/scraper/stop');
+      alert(res.data.message);
+      fetchPipelineState();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error stopping scraper');
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  const handleKillScraper = async () => {
+    if (!window.confirm('FORCE TERMINATE the scraper? This will stop it immediately and may result in partial data for the current task.')) return;
+    setStopping(true);
+    try {
+      const res = await axios.post('/api/scraper/kill');
+      alert(res.data.message);
+      fetchPipelineState();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Error killing scraper');
+    } finally {
+      setStopping(false);
     }
   };
 
@@ -382,6 +451,10 @@ const App = () => {
             setApiFilters={setApiFilters}
             getSourceStats={getSourceStats}
             getCityStats={getCityStats}
+            pipelineState={pipelineState}
+            handleStopScraper={handleStopScraper}
+            handleKillScraper={handleKillScraper}
+            stopping={stopping}
             setSelectedJob={async (job) => {
               if (!job) {
                 setSelectedJob(null);
@@ -391,10 +464,15 @@ const App = () => {
               setSelectedJob({ ...job, loading: true });
               try {
                 const res = await axios.get(`/api/jobs/${job.id}`);
-                setSelectedJob({ ...res.data, loading: false });
+                if (res.data && typeof res.data === 'object' && !Array.isArray(res.data)) {
+                  setSelectedJob(prev => prev ? { ...prev, ...res.data, loading: false } : null);
+                } else {
+                  console.error("Invalid job detail format:", res.data);
+                  setSelectedJob(prev => prev ? { ...prev, loading: false, error: "Failed to load description" } : null);
+                }
               } catch (err) {
                 console.error("Failed to fetch job details:", err);
-                setSelectedJob({ ...job, loading: false, error: "Failed to load description" });
+                setSelectedJob(prev => prev ? { ...prev, loading: false, error: "Failed to load description" } : null);
               }
             }}
             fetchData={fetchData}
@@ -413,6 +491,9 @@ const App = () => {
             settings={settings}
             setSettings={setSettings}
             saveSettings={saveSettings}
+            searchesConfig={searchesConfig}
+            setSearchesConfig={setSearchesConfig}
+            saveSearches={saveSearches}
             savingConfig={savingConfig}
             savingSettings={savingSettings}
           />
@@ -421,9 +502,13 @@ const App = () => {
           <ActionsView 
             triggering={triggering}
             handleTriggerScraper={handleTriggerScraper}
+            pipelineState={pipelineState}
+            handleStopScraper={handleStopScraper}
+            stopping={stopping}
             testing={testing}
             testScraper={testScraper}
             testOutput={testOutput}
+            setTestOutput={setTestOutput}
             systemLogs={systemLogs}
             fetchLogs={fetchLogs}
             fetchingLogs={fetchingLogs}
@@ -465,9 +550,19 @@ const App = () => {
                       <Calendar size={16} /> 
                       {(() => {
                         const dateStr = selectedJob.date_posted;
-                        if (!dateStr || dateStr.toLowerCase() === 'nan') return 'Recently';
-                        const d = new Date(dateStr);
-                        return !isNaN(d.getTime()) ? d.toLocaleDateString() : 'Recently';
+                        let d = null;
+                        if (!dateStr || dateStr.toLowerCase() === 'nan') {
+                           if (selectedJob.created_at) d = new Date(selectedJob.created_at);
+                        } else {
+                           d = new Date(dateStr);
+                        }
+                        
+                        if (d && !isNaN(d.getTime())) {
+                           const diffHours = (new Date() - d) / (1000 * 60 * 60);
+                           if (diffHours <= 24) return 'Today';
+                           return d.toLocaleDateString();
+                        }
+                        return 'Recently';
                       })()}
                     </div>
                   </div>
@@ -507,7 +602,7 @@ const App = () => {
                 rel="noopener noreferrer" 
                 className="btn-base btn-solid flex-1 h-12 text-base font-semibold shadow-xl shadow-indigo-500/10 hover:shadow-indigo-500/20 transition-all"
               >
-                Apply on {selectedJob.source.charAt(0).toUpperCase() + selectedJob.source.slice(1)} <ExternalLink size={18} />
+                Apply on {selectedJob.source ? (selectedJob.source.charAt(0).toUpperCase() + selectedJob.source.slice(1)) : 'Source'} <ExternalLink size={18} />
               </a>
               <button 
                 className="btn-base btn-ghost h-12 px-8 font-medium hover:bg-white/5" 
@@ -569,7 +664,8 @@ const Sidebar = ({ currentView, setCurrentView, handleLogout }) => (
 
 const DashboardView = ({ 
   jobs, stats, getSourceStats, getCityStats, setSelectedJob, fetchData,
-  totalJobs, currentPage, setCurrentPage, pageSize, apiFilters, setApiFilters 
+  totalJobs, currentPage, setCurrentPage, pageSize, apiFilters, setApiFilters,
+  pipelineState, handleStopScraper, handleKillScraper, stopping
 }) => {
   const [localSearch, setLocalSearch] = useState(apiFilters.search);
   
@@ -615,6 +711,14 @@ const DashboardView = ({
 
   return (
     <div className="space-y-6 animate-in">
+      {pipelineState && pipelineState.is_active && (
+        <PipelineStatusCard 
+          state={pipelineState} 
+          handleStopScraper={handleStopScraper} 
+          handleKillScraper={handleKillScraper} 
+          stopping={stopping} 
+        />
+      )}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-card-header">
@@ -768,9 +872,19 @@ const DashboardView = ({
                       <Calendar size={12} className="text-muted" /> 
                       {(() => {
                         const dateStr = job.date_posted;
-                        if (!dateStr || dateStr.toLowerCase() === 'nan') return 'Recently';
-                        const d = new Date(dateStr);
-                        return !isNaN(d.getTime()) ? d.toLocaleDateString() : 'Recently';
+                        let d = null;
+                        if (!dateStr || dateStr.toLowerCase() === 'nan') {
+                           if (job.created_at) d = new Date(job.created_at);
+                        } else {
+                           d = new Date(dateStr);
+                        }
+                        
+                        if (d && !isNaN(d.getTime())) {
+                           const diffHours = (new Date() - d) / (1000 * 60 * 60);
+                           if (diffHours <= 24) return 'Today';
+                           return d.toLocaleDateString();
+                        }
+                        return 'Recently';
                       })()}
                     </div>
                   </td>
@@ -830,10 +944,12 @@ const DashboardView = ({
 const ConfigurationView = ({ 
   citiesConfig, setCitiesConfig, addCity, saveCities,
   jobTitlesConfig, setJobTitlesConfig, addJobTitle, saveJobTitles,
+  searchesConfig, setSearchesConfig, saveSearches,
   settings, setSettings, saveSettings, savingConfig, savingSettings
 }) => {
   const [newCity, setNewCity] = useState('');
   const [newJobTitle, setNewJobTitle] = useState('');
+  const [newSearch, setNewSearch] = useState({ name: '', job_title: '', location: '', max_results: 20 });
 
   const handleAddCity = () => {
     if (newCity.trim()) {
@@ -867,6 +983,14 @@ const ConfigurationView = ({
 
   const removeItem = (list, setList, index) => {
     setList(list.filter((_, i) => i !== index));
+  };
+
+  const handleAddSearch = () => {
+    if (newSearch.job_title && newSearch.location) {
+      const name = newSearch.name || `${newSearch.job_title} in ${newSearch.location}`;
+      setSearchesConfig([...searchesConfig, { ...newSearch, name, enabled: true }]);
+      setNewSearch({ name: '', job_title: '', location: '', max_results: 20 });
+    }
   };
 
   return (
@@ -960,6 +1084,98 @@ const ConfigurationView = ({
       </div>
 
       <div className="stat-card mt-8">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="chart-title mb-0">Search Architecture Tasks</h3>
+          <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{searchesConfig.length}</span>
+        </div>
+        
+        <p className="text-xs text-muted mb-6">Define specific combinations of job titles and cities for targeted scraping. If enabled, the pipeline will prioritize these tasks.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+          <div className="md:col-span-1">
+            <label className="text-[10px] font-bold text-muted uppercase mb-1 block">Display Name (Optional)</label>
+            <input 
+              className="input-base w-full"
+              placeholder="e.g. US Tech Hunt"
+              value={newSearch.name}
+              onChange={(e) => setNewSearch({...newSearch, name: e.target.value})}
+            />
+          </div>
+          <div className="md:col-span-1">
+            <label className="text-[10px] font-bold text-muted uppercase mb-1 block">Job Title *</label>
+            <input 
+              className="input-base w-full"
+              placeholder="e.g. Backend Developer"
+              value={newSearch.job_title}
+              onChange={(e) => setNewSearch({...newSearch, job_title: e.target.value})}
+            />
+          </div>
+          <div className="md:col-span-1">
+            <label className="text-[10px] font-bold text-muted uppercase mb-1 block">Location *</label>
+            <input 
+              className="input-base w-full"
+              placeholder="e.g. Remote / New York"
+              value={newSearch.location}
+              onChange={(e) => setNewSearch({...newSearch, location: e.target.value})}
+            />
+          </div>
+          <div className="md:col-span-1">
+            <label className="text-[10px] font-bold text-muted uppercase mb-1 block">Max Results</label>
+            <input 
+              type="number"
+              className="input-base w-full"
+              placeholder="20"
+              value={newSearch.max_results}
+              onChange={(e) => setNewSearch({...newSearch, max_results: parseInt(e.target.value) || 0})}
+            />
+          </div>
+          <div className="flex items-end">
+            <button className="btn-base btn-solid w-full h-10" onClick={handleAddSearch}>
+              <Plus size={18} /> Add Task
+            </button>
+          </div>
+        </div>
+
+        <div className="config-list max-h-[400px] overflow-y-auto mb-6">
+          {searchesConfig.map((search, i) => (
+            <div key={i} className={`config-item ${!search.enabled ? 'opacity-40' : ''}`}>
+              <div className="flex items-center gap-3">
+                <div className="config-item-drag">
+                  <button onClick={() => moveItem(searchesConfig, setSearchesConfig, i, 'up')}><ChevronUp size={14} /></button>
+                  <button onClick={() => moveItem(searchesConfig, setSearchesConfig, i, 'down')}><ChevronDown size={14} /></button>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white flex items-center gap-2">
+                    {search.name}
+                    {search.enabled && <div className="w-1.5 h-1.5 bg-accent-success rounded-full animate-pulse"></div>}
+                  </div>
+                  <div className="text-[10px] text-muted uppercase flex items-center gap-3">
+                    <span className="flex items-center gap-1"><Briefcase size={10} /> {search.job_title}</span>
+                    <span className="flex items-center gap-1"><MapPin size={10} /> {search.location}</span>
+                    <span className="flex items-center gap-1"><Activity size={10} /> {search.max_results || 'Default'} results</span>
+                  </div>
+                </div>
+              </div>
+              <div className="config-item-actions">
+                <button className={`action-icon-btn ${search.enabled ? 'success' : ''}`} onClick={() => toggleItem(searchesConfig, setSearchesConfig, i)}>
+                  {search.enabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                </button>
+                <button className="action-icon-btn delete" onClick={() => removeItem(searchesConfig, setSearchesConfig, i)}><Trash2 size={16} /></button>
+              </div>
+            </div>
+          ))}
+          {searchesConfig.length === 0 && (
+            <div className="text-center py-8 text-muted text-sm border border-dashed border-white/10 rounded-xl">
+              No custom search tasks defined. Pipeline will use Cartesian product of Cities & Roles.
+            </div>
+          )}
+        </div>
+        <button className="btn-base btn-solid w-full" onClick={saveSearches} disabled={savingConfig}>
+          <Save size={16} /> {savingConfig ? 'Saving...' : 'Sync Search Architecture'}
+        </button>
+      </div>
+
+      <div className="stat-card mt-8">
         <h3 className="chart-title">Global Settings</h3>
         <div className="grid grid-cols-2 gap-8">
           <div className="flex flex-col gap-6">
@@ -1001,6 +1217,41 @@ const ConfigurationView = ({
                 }}
               />
             </div>
+            <div className="form-group">
+              <label className="text-xs font-bold text-muted uppercase mb-2 block">Max Parallel Searches</label>
+              <input 
+                type="number" 
+                className="input-base w-full border-accent-primary/30"
+                placeholder="Default: 3"
+                value={settings.max_parallel_searches || ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                  setSettings({...settings, max_parallel_searches: isNaN(val) ? 0 : val});
+                }}
+              />
+              <p className="text-[9px] text-muted mt-1 italic">Controls how many searches run concurrently.</p>
+            </div>
+            
+            <div className="form-group">
+              <label className="text-xs font-bold text-muted uppercase mb-2 block">AI Processing Power</label>
+              <div className="flex items-center gap-3 bg-black/20 p-3 rounded-lg border border-white/5">
+                <button 
+                  className={`action-icon-btn ${settings.ai_processing_enabled ? 'success' : ''}`}
+                  onClick={() => setSettings({...settings, ai_processing_enabled: !settings.ai_processing_enabled})}
+                >
+                  {settings.ai_processing_enabled ? <ToggleRight size={28} className="text-accent-success" /> : <ToggleLeft size={28} className="text-muted" />}
+                </button>
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    {settings.ai_processing_enabled ? 'AI ACTIVE' : 'AI PAUSED'}
+                  </div>
+                  <div className="text-[9px] text-muted uppercase tracking-wider">
+                    {settings.ai_processing_enabled ? 'Consuming tokens for enrichment' : 'Token expenses stopped'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button 
               className="btn-base btn-solid w-full mt-auto" 
               onClick={saveSettings}
@@ -1016,7 +1267,7 @@ const ConfigurationView = ({
 };
 
 const ActionsView = ({ 
-  triggering, handleTriggerScraper, testing, testScraper, testOutput, 
+  triggering, handleTriggerScraper, pipelineState, handleStopScraper, handleKillScraper, stopping, testing, testScraper, testOutput, setTestOutput,
   systemLogs, fetchLogs, fetchingLogs, setSystemLogs,
   customCity, setCustomCity, customJobTitle, setCustomJobTitle, customMaxResults, setCustomMaxResults
 }) => (
@@ -1025,16 +1276,52 @@ const ActionsView = ({
     
     <div className="grid grid-cols-3 gap-6 mb-8">
       <div className="stat-card">
-        <h3 className="text-sm font-bold text-muted uppercase mb-4">Run Full Scrape</h3>
-        <p className="text-xs text-muted mb-6">Executes the scraper for all enabled cities and roles.</p>
-        <button 
-          className="btn-base btn-solid w-full" 
-          onClick={handleTriggerScraper}
-          disabled={triggering}
-        >
-          {triggering ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-          {triggering ? 'Scraping...' : 'Start Full Cycle'}
-        </button>
+        <h3 className="text-sm font-bold text-muted uppercase mb-4">Pipeline Control</h3>
+        <p className="text-xs text-muted mb-6">
+          {pipelineState?.is_active 
+            ? `Running: ${pipelineState?.current_job} in ${pipelineState?.current_city}` 
+            : 'Start the automated job search sequence.'}
+        </p>
+        <div className="flex flex-col gap-2">
+          <button 
+            className="btn-base btn-solid w-full" 
+            onClick={() => handleTriggerScraper(true)}
+            disabled={triggering || pipelineState?.is_active}
+          >
+            <Play size={16} /> Start Fresh Cycle
+          </button>
+          <button 
+            className="btn-base btn-ghost w-full" 
+            onClick={() => handleTriggerScraper(false)}
+            disabled={triggering || pipelineState?.is_active}
+          >
+            <RefreshCw size={16} className={triggering ? 'animate-spin' : ''} /> Resume Pipeline
+          </button>
+          <div className="mt-4 p-3 bg-accent-danger/5 border border-accent-danger/20 rounded-lg">
+            <h4 className="text-[10px] font-bold text-accent-danger uppercase mb-2 flex items-center gap-2">
+              <Zap size={10} /> Terminator Controls
+            </h4>
+            <div className="flex gap-2">
+              <button 
+                className="btn-base btn-ghost flex-1 text-[11px] text-accent-danger border-accent-danger/30" 
+                onClick={handleStopScraper}
+                disabled={stopping || !pipelineState?.is_active}
+              >
+                <Square size={12} /> Graceful Stop
+              </button>
+              <button 
+                className="btn-base btn-solid flex-1 text-[11px] bg-accent-danger hover:bg-red-600 border-none" 
+                onClick={handleKillScraper}
+                disabled={stopping || !pipelineState?.is_active}
+              >
+                <Zap size={12} /> Force Kill
+              </button>
+            </div>
+            {!pipelineState?.is_active && (
+              <p className="text-[9px] text-muted mt-2 text-center">Standby - No active process detected</p>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="stat-card">
@@ -1084,7 +1371,15 @@ const ActionsView = ({
           <button className="btn-base btn-ghost" onClick={fetchLogs} disabled={fetchingLogs}>
             <RefreshCw size={14} className={fetchingLogs ? 'animate-spin' : ''} /> Refresh
           </button>
-          <button className="btn-base btn-ghost" onClick={async () => {
+          <a 
+            href="/api/logs/download" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="btn-base btn-ghost flex items-center gap-2"
+          >
+            <Download size={14} /> Download
+          </a>
+          <button className="btn-base btn-ghost text-accent-danger border-accent-danger/20" onClick={async () => {
             if(window.confirm('Clear logs?')) await axios.delete('/api/logs/clear');
             setSystemLogs('');
           }}>Clear</button>
@@ -1107,5 +1402,87 @@ const ActionsView = ({
     </div>
   </div>
 );
+
+const PipelineStatusCard = ({ state, handleStopScraper, handleKillScraper, stopping }) => {
+  const hasParallelTasks = state.running_tasks && state.running_tasks.length > 0;
+  
+  return (
+    <div className="stat-card border-accent-primary/30 bg-accent-primary/5 animate-pulse-subtle">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2">
+          <Activity size={18} className="text-accent-primary animate-pulse" />
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+            {hasParallelTasks ? `Parallel Engine Active (${state.running_tasks.length})` : 'Pipeline Active'}
+          </h3>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1">
+            <button 
+              className="p-1.5 hover:bg-accent-danger/20 text-accent-danger/60 hover:text-accent-danger rounded transition-colors"
+              onClick={handleStopScraper}
+              disabled={stopping}
+              title="Graceful Stop"
+            >
+              <Square size={14} />
+            </button>
+            <button 
+              className="p-1.5 hover:bg-accent-danger/30 text-accent-danger hover:text-white hover:bg-accent-danger rounded transition-colors"
+              onClick={handleKillScraper}
+              disabled={stopping}
+              title="Force Kill (Terminator)"
+            >
+              <Zap size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {hasParallelTasks ? (
+        <div className="space-y-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+          {state.running_tasks.map((task, i) => (
+            <div key={task.idx || i} className="flex items-center justify-between p-2 bg-black/20 rounded-lg border border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 flex items-center justify-center bg-accent-primary/20 rounded text-[10px] font-bold text-accent-primary">
+                  {task.idx + 1}
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-white">{task.name}</div>
+                  <div className="text-[9px] text-muted uppercase">Started: {task.start_time}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <RefreshCw size={10} className="animate-spin text-accent-primary" />
+                <span className="text-[9px] font-bold text-accent-primary uppercase">Scraping</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-[10px] text-muted uppercase mb-1">Current Role</div>
+            <div className="text-sm font-semibold text-white">{state.current_job || 'Initializing...'}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-muted uppercase mb-1">Target City</div>
+            <div className="text-sm font-semibold text-white">{state.current_city || 'Initializing...'}</div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
+        <div className="text-[10px] text-muted">
+          Last update: {state.last_updated} | Completed: {state.completed_indices?.length || 0} tasks
+        </div>
+        {!hasParallelTasks && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 bg-accent-success rounded-full animate-ping"></div>
+            <span className="text-[10px] font-bold text-accent-success uppercase">Processing</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default App;
