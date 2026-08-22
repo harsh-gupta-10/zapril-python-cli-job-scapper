@@ -25,7 +25,7 @@
     },
     {
         "name": "Pune",
-        "enabled": true
+        "enabled": false
     },
     {
         "name": "Chennai",
@@ -205,6 +205,54 @@
     },
     {
         "name": "Aligarh",
+        "enabled": false
+    },
+    {
+        "name": "Mangalore",
+        "enabled": false
+    },
+    {
+        "name": "Dehradun",
+        "enabled": false
+    },
+    {
+        "name": "Rourkela",
+        "enabled": false
+    },
+    {
+        "name": "Jamshedpur",
+        "enabled": false
+    },
+    {
+        "name": "Cuttack",
+        "enabled": false
+    },
+    {
+        "name": "Udaipur",
+        "enabled": false
+    },
+    {
+        "name": "Guntur",
+        "enabled": false
+    },
+    {
+        "name": "Kolhapur",
+        "enabled": false
+    },
+    {
+        "name": "Panaji",
+        "enabled": false
+    },
+    {
+        "name": "Shimla",
+        "enabled": false
+    },
+    {
+        "name": "Kozhikode",
+        "enabled": false
+    },
+    {
+        "name": "Vellore",
         "enabled": false
     }
 ]

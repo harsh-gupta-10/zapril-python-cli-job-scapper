@@ -65,7 +65,16 @@ def load_settings():
         "scraping_interval_hours": 48,
         "lookback_period_hours": 48,
         "max_results_per_scrape": 10,
-        "enabled_platforms": ["linkedin", "indeed", "glassdoor", "naukri", "foundit"],
+        "enabled_platforms": [
+            "linkedin",
+            "indeed",
+            "zip_recruiter",
+            "bayt",
+            "glassdoor",
+            "naukri",
+            "foundit",
+        ],
+        "multi_layer_scraping": True,
         "max_parallel_searches": 3
     }
 
@@ -165,18 +174,25 @@ def run_single_search(idx, search, settings, env, resume):
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
             
-        process = subprocess.Popen(cmd, env=env, **kwargs)
-        
-        with child_processes_lock:
-            active_child_processes.append(process)
+        log_filename = os.path.join("cache", f"task_{idx}.log")
+        with open(log_filename, "w", encoding="utf-8", errors="replace") as log_file:
+            log_file.write(f"--- Task [{idx+1}]: {search_name} Started at {datetime.now()} ---\n")
+            log_file.flush()
             
-        try:
-            # 1 hour timeout for a single search/city combo (safety valve)
-            process.wait(timeout=3600)
-        except subprocess.TimeoutExpired:
-            console.print(f"[bold red]✖ Task [{idx+1}] TIMED OUT: {search_name}. Terminating...[/]")
-            process.kill()
-            process.wait() # Ensure it's reaped
+            process = subprocess.Popen(cmd, env=env, stdout=log_file, stderr=log_file, **kwargs)
+            
+            with child_processes_lock:
+                active_child_processes.append(process)
+                
+            try:
+                # 1 hour timeout for a single search/city combo (safety valve)
+                process.wait(timeout=3600)
+            except subprocess.TimeoutExpired:
+                log_file.write(f"\n✖ Task [{idx+1}] TIMED OUT: {search_name}. Terminating...\n")
+                process.kill()
+                process.wait() # Ensure it's reaped
+            
+            log_file.write(f"\n--- Task [{idx+1}] Finished with exit code {process.returncode} at {datetime.now()} ---\n")
         
         with child_processes_lock:
             if process in active_child_processes:
@@ -198,6 +214,12 @@ def run_single_search(idx, search, settings, env, resume):
         
     except Exception as e:
         console.print(f"[red]Error in Task [{idx+1}] {search_name}: {e}[/]")
+        try:
+            log_filename = os.path.join("cache", f"task_{idx}.log")
+            with open(log_filename, "a", encoding="utf-8", errors="replace") as log_file:
+                log_file.write(f"\nERROR in Task: {str(e)}\n")
+        except:
+            pass
         state = load_state()
         state["running_tasks"] = [t for t in state["running_tasks"] if t["idx"] != idx]
         save_state(state)
@@ -209,7 +231,8 @@ def check_stop_flag():
 
 def run_pipeline(resume=True):
     settings = load_settings()
-    max_parallel = settings.get("max_parallel_searches", 3)
+    multi_layer = settings.get("multi_layer_scraping", True)
+    max_parallel = settings.get("max_parallel_searches", 3) if multi_layer else 1
     all_searches = load_searches()
 
     if not all_searches:
@@ -223,11 +246,23 @@ def run_pipeline(resume=True):
         "status": "idle"
     }
     
-    # If starting fresh, clear completed
+    # If starting fresh, clear completed and remove old task logs
     if not resume:
         state["completed_indices"] = []
         state["running_tasks"] = []
         save_state(state)
+        # Clear old task logs from cache
+        try:
+            cache_dir = "cache"
+            if os.path.exists(cache_dir):
+                for filename in os.listdir(cache_dir):
+                    if filename.startswith("task_") and filename.endswith(".log"):
+                        try:
+                            os.remove(os.path.join(cache_dir, filename))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
     console.print(f"[bold cyan]🚀 Starting Parallel Pipeline at {datetime.now().strftime('%H:%M:%S')}[/]")
     console.print(f"Total Tasks: {len(all_searches)} searches | Concurrency: {max_parallel}")
@@ -345,5 +380,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     run_pipeline(resume=not args.new)
-
 

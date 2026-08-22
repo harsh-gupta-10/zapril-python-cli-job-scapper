@@ -2,15 +2,15 @@
 Naukri Scraper — Uses curl_cffi with Chrome TLS impersonation
 to access Naukri's internal job search API.
 
-Falls back gracefully with clear messaging when blocked by anti-bot.
+Falls back gracefully with Camoufox stealth HTML fetch when blocked by anti-bot.
 """
 
+import asyncio
 import re
 import json
 import time
 import pandas as pd
 from datetime import datetime, timedelta
-from processors.date_parser import parse_relative_date
 from rich.console import Console
 from rich.progress import (
     Progress,
@@ -18,6 +18,13 @@ from rich.progress import (
     TextColumn,
     BarColumn,
     TaskProgressColumn,
+)
+from processors.field_extractor import (
+    clean_html_text,
+    extract_salary_text,
+    extract_work_experience,
+    normalize_date_posted,
+    normalize_text,
 )
 
 console = Console()
@@ -37,7 +44,7 @@ def scrape_naukri(
     Scrape job listings from Naukri.com.
 
     Uses curl_cffi with TLS fingerprint impersonation and Naukri's
-    internal API. Falls back to Playwright if available.
+    internal API. Falls back to Camoufox stealth HTML fetch when blocked.
     """
     try:
         from curl_cffi import requests as cffi_requests
@@ -85,11 +92,19 @@ def scrape_naukri(
                     if current_page == 1:
                         progress.update(
                             task,
-                            description="[cyan]Naukri: API blocked, trying HTML scrape...",
+                            description="[cyan]Naukri: API blocked, trying Camoufox stealth...",
                         )
-                        html_results = _scrape_html_fallback(
-                            session, search_term, location, max_results, job_type
+                        html_results = _scrape_html_with_camoufox(
+                            search_term, location, max_results, job_type
                         )
+                        if not html_results:
+                            progress.update(
+                                task,
+                                description="[cyan]Naukri: Camoufox unavailable, trying HTTP fallback...",
+                            )
+                            html_results = _scrape_html_fallback(
+                                session, search_term, location, max_results, job_type
+                            )
                         all_listings.extend(html_results)
                     break
 
@@ -217,18 +232,26 @@ def _parse_api_job(job: dict) -> dict | None:
     try:
         title = job.get("title", "") or ""
         company = job.get("companyName", "") or ""
-        location = job.get("placeholders", [{}])[0].get("value", "") if job.get("placeholders") else ""
+        placeholders = job.get("placeholders", []) or []
+
+        location = ""
+        for ph in placeholders:
+            if str(ph.get("type", "")).lower() in {"location", "loc"}:
+                location = ph.get("value", "") or ""
+                break
+        if not location and placeholders:
+            location = placeholders[0].get("value", "") or ""
 
         # Salary
         salary = ""
-        for ph in job.get("placeholders", []):
+        for ph in placeholders:
             if ph.get("type") == "salary":
                 salary = ph.get("value", "")
                 break
 
         # Experience
         experience = ""
-        for ph in job.get("placeholders", []):
+        for ph in placeholders:
             if ph.get("type") == "experience":
                 experience = ph.get("value", "")
                 break
@@ -244,6 +267,8 @@ def _parse_api_job(job: dict) -> dict | None:
         # Tags/skills
         tags = job.get("tagsAndSkills", "")
 
+        description = clean_html_text(job.get("jobDescription") or job.get("jd") or "")
+
         if not title and not company:
             return None
 
@@ -253,16 +278,20 @@ def _parse_api_job(job: dict) -> dict | None:
         if tags:
             desc_parts.append(f"Skills: {tags}")
 
+        if not description and desc_parts:
+            description = " | ".join(desc_parts)
+
         return {
             "source": "naukri",
             "title": title.strip(),
             "company": company.strip(),
-            "location": location.strip() if location else "",
-            "salary": salary,
+            "location": normalize_text(location),
+            "salary": normalize_text(salary) or extract_salary_text(description),
+            "work_experience": extract_work_experience(experience, description),
             "job_type": job.get("jobType", "").lower() if job.get("jobType") else "",
-            "date_posted": _normalize_api_date(created),
+            "date_posted": normalize_date_posted(created),
             "job_url": job_url,
-            "description": job.get("jobDescription", " | ".join(desc_parts)) if job.get("jobDescription") else (" | ".join(desc_parts) if desc_parts else ""),
+            "description": description,
         }
 
     except Exception:
@@ -287,42 +316,67 @@ def _scrape_html_fallback(
             return []
 
         html = resp.text
-
-        # Try to find embedded JSON data
-        # Naukri sometimes includes SSR data in script tags
-        import re as _re
-
-        # Look for window.__INITIAL_STATE__ or similar
-        patterns = [
-            r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
-            r'window\.__NEXT_DATA__\s*=\s*({.*?});',
-            r'"jobDetails"\s*:\s*(\[.*?\])',
-        ]
-
-        for pattern in patterns:
-            match = _re.search(pattern, html, _re.DOTALL)
-            if match:
-                try:
-                    data = json.loads(match.group(1))
-                    if isinstance(data, dict):
-                        jobs = data.get("jobDetails", []) or data.get("jobs", [])
-                    elif isinstance(data, list):
-                        jobs = data
-                    else:
-                        continue
-
-                    for job in jobs[:max_results]:
-                        listing = _parse_api_job(job)
-                        if listing:
-                            listings.append(listing)
-
-                    if listings:
-                        break
-                except (json.JSONDecodeError, KeyError):
-                    continue
+        listings = _extract_jobs_from_html(html, max_results)
 
     except Exception:
         pass
+
+    return listings
+
+
+def _scrape_html_with_camoufox(
+    search_term: str, location: str, max_results: int, job_type: str | None
+) -> list[dict]:
+    """Use Camoufox stealth fetcher for Naukri HTML fallback."""
+    try:
+        from scrapers.scraper_engine import ScraperEngine, ScraperEngineError
+    except ImportError:
+        return []
+
+    url = _build_naukri_url(search_term, location, job_type)
+    try:
+        engine = ScraperEngine()
+        html = asyncio.run(engine.fetch(url))
+    except (ScraperEngineError, RuntimeError):
+        return []
+
+    return _extract_jobs_from_html(html, max_results)
+
+
+def _extract_jobs_from_html(html: str, max_results: int) -> list[dict]:
+    """Extract job rows from Naukri HTML script payloads."""
+    listings = []
+
+    patterns = [
+        r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
+        r'window\.__NEXT_DATA__\s*=\s*({.*?});',
+        r'"jobDetails"\s*:\s*(\[.*?\])',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, html, re.DOTALL)
+        if not match:
+            continue
+
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            continue
+
+        if isinstance(data, dict):
+            jobs = data.get("jobDetails", []) or data.get("jobs", [])
+        elif isinstance(data, list):
+            jobs = data
+        else:
+            continue
+
+        for job in jobs[:max_results]:
+            listing = _parse_api_job(job)
+            if listing:
+                listings.append(listing)
+
+        if listings:
+            break
 
     return listings
 
@@ -369,17 +423,4 @@ def _filter_by_age(listings: list[dict], hours_old: int) -> list[dict]:
 
 def _normalize_api_date(date_val) -> str:
     """Convert Naukri API date to YYYY-MM-DD."""
-    if not date_val:
-        return ""
-
-    # Could be a timestamp (epoch ms) or a string
-    if isinstance(date_val, (int, float)):
-        try:
-            return datetime.fromtimestamp(date_val / 1000).strftime("%Y-%m-%d")
-        except (ValueError, OSError):
-            return ""
-
-    if isinstance(date_val, str):
-        return parse_relative_date(date_val)
-
-    return str(date_val)
+    return normalize_date_posted(date_val)

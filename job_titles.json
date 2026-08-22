@@ -154,5 +154,377 @@
     {
         "name": "Founder",
         "enabled": true
+    },
+    {
+        "name": "House keeping",
+        "enabled": true
+    },
+    {
+        "name": "3D printing",
+        "enabled": true
+    },
+    {
+        "name": "Data Scientist",
+        "enabled": true
+    },
+    {
+        "name": "Machine Learning Engineer",
+        "enabled": true
+    },
+    {
+        "name": "DevOps Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Site Reliability Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Cloud Engineer",
+        "enabled": true
+    },
+    {
+        "name": "Business Analyst",
+        "enabled": true
+    },
+    {
+        "name": "Research Scientist",
+        "enabled": true
+    },
+    {
+        "name": "Pharmacist",
+        "enabled": true
+    },
+    {
+        "name": "Nurse",
+        "enabled": true
+    },
+    {
+        "name": "Chef",
+        "enabled": true
+    },
+    {
+        "name": "Retail Sales Associate",
+        "enabled": true
+    },
+    {
+        "name": "Electrician",
+        "enabled": true
+    },
+    {
+        "name": "Plumber",
+        "enabled": true
+    },
+    {
+        "name": "Carpenter",
+        "enabled": true
+    },
+    {
+        "name": "Driver",
+        "enabled": true
+    },
+    {
+        "name": "Primary School Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Secondary School Teacher",
+        "enabled": true
+    },
+    {
+        "name": "High School Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Middle School Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Elementary School Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Preschool Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Kindergarten Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Special Education Teacher",
+        "enabled": true
+    },
+    {
+        "name": "ESL Teacher",
+        "enabled": true
+    },
+    {
+        "name": "English Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Math Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Science Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Biology Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Chemistry Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Physics Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Computer Science Teacher",
+        "enabled": true
+    },
+    {
+        "name": "History Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Geography Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Social Studies Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Art Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Music Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Physical Education Teacher",
+        "enabled": true
+    },
+    {
+        "name": "Vocational Trainer",
+        "enabled": true
+    },
+    {
+        "name": "Lecturer",
+        "enabled": true
+    },
+    {
+        "name": "Senior Lecturer",
+        "enabled": true
+    },
+    {
+        "name": "Assistant Professor",
+        "enabled": true
+    },
+    {
+        "name": "Associate Professor",
+        "enabled": true
+    },
+    {
+        "name": "Professor",
+        "enabled": true
+    },
+    {
+        "name": "Adjunct Professor",
+        "enabled": true
+    },
+    {
+        "name": "Visiting Professor",
+        "enabled": true
+    },
+    {
+        "name": "Research Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Postdoctoral Researcher",
+        "enabled": true
+    },
+    {
+        "name": "Academic Advisor",
+        "enabled": true
+    },
+    {
+        "name": "Dean",
+        "enabled": true
+    },
+    {
+        "name": "Head of Department",
+        "enabled": true
+    },
+    {
+        "name": "Principal",
+        "enabled": true
+    },
+    {
+        "name": "Vice Principal",
+        "enabled": true
+    },
+    {
+        "name": "Curriculum Developer",
+        "enabled": true
+    },
+    {
+        "name": "Instructional Designer",
+        "enabled": true
+    },
+    {
+        "name": "E-learning Specialist",
+        "enabled": true
+    },
+    {
+        "name": "Education Coordinator",
+        "enabled": true
+    },
+    {
+        "name": "Academic Librarian",
+        "enabled": true
+    },
+    {
+        "name": "Library Assistant",
+        "enabled": true
+    },
+    {
+        "name": "School Counselor",
+        "enabled": true
+    },
+    {
+        "name": "Educational Psychologist",
+        "enabled": true
+    },
+    {
+        "name": "Training Manager",
+        "enabled": true
+    },
+    {
+        "name": "Corporate Trainer",
+        "enabled": true
+    },
+    {
+        "name": "Learning & Development Specialist",
+        "enabled": true
+    },
+    {
+        "name": "Tutor",
+        "enabled": true
+    },
+    {
+        "name": "Teaching Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Administrative Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Executive Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Personal Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Virtual Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Office Assistant",
+        "enabled": true
+    },
+    {
+        "name": "HR Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Marketing Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Sales Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Accounting Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Finance Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Legal Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Nursing Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Medical Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Dental Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Pharmacy Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Laboratory Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Procurement Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Project Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Customer Service Assistant",
+        "enabled": true
+    },
+    {
+        "name": "IT Support Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Engineering Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Clinical Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Care Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Recruitment Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Data Entry Assistant",
+        "enabled": true
+    },
+    {
+        "name": "Assistant Professor",
+        "enabled": true
     }
 ]

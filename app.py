@@ -78,8 +78,20 @@ def load_settings():
         "phased_scraping": True,
         "jobs_per_phase": 3,
         "cities_per_phase": 3,
-        "enabled_platforms": ["linkedin", "indeed", "glassdoor", "naukri", "foundit", "internshala", "google"],
-        "ai_processing_enabled": True
+        "enabled_platforms": [
+            "linkedin",
+            "indeed",
+            "zip_recruiter",
+            "bayt",
+            "glassdoor",
+            "naukri",
+            "foundit",
+            "internshala",
+            "google",
+        ],
+        "ai_processing_enabled": True,
+        "multi_layer_scraping": True,
+        "max_parallel_searches": 3
     }
 
 def rotate_logs(filename="job_scraper.log", max_size_mb=10, backup_count=5):
@@ -326,16 +338,45 @@ def kill_scraper():
         for proc in psutil.process_iter(['cmdline']):
             try:
                 cmdline = proc.info['cmdline']
-                if cmdline and "schedule_runner.py" in " ".join(cmdline):
-                    proc.kill() # Force kill
-                    killed = True
+                if cmdline:
+                    cmd_str = " ".join(cmdline)
+                    if "schedule_runner.py" in cmd_str:
+                        # Kill children first
+                        try:
+                            for child in proc.children(recursive=True):
+                                child.kill()
+                        except Exception:
+                            pass
+                        proc.kill()
+                        killed = True
+                    elif "main.py" in cmd_str and "--location" in cmd_str:
+                        proc.kill()
+                        killed = True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         
         # Also clean up the flag file if it exists
         flag_path = os.path.join("cache", "stop_scraper.flag")
         if os.path.exists(flag_path):
-            os.remove(flag_path)
+            try:
+                os.remove(flag_path)
+            except Exception:
+                pass
+
+        # Update the state file to show idle / killed
+        state_file = os.path.join("cache", "scraper_state.json")
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r") as f:
+                    state = json.load(f)
+                state["status"] = "killed"
+                state["is_active"] = False
+                state["running_tasks"] = []
+                state["last_updated"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                with open(state_file, "w") as f:
+                    json.dump(state, f, indent=4)
+            except Exception:
+                pass
             
         if killed:
             return jsonify({"status": "success", "message": "Scraper process forcefully terminated."})
@@ -491,6 +532,18 @@ def settings_api():
             return jsonify({"status": "success", "settings": data})
         else:
             return jsonify(load_settings())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scraper/task-log/<int:idx>")
+def get_task_log(idx):
+    try:
+        filename = os.path.join("cache", f"task_{idx}.log")
+        if os.path.exists(filename):
+            with open(filename, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+                return jsonify({"logs": "".join(lines[-150:])})
+        return jsonify({"logs": "Initializing task log..."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -1,4 +1,6 @@
 import os
+import ast
+import json
 import pandas as pd
 from sqlalchemy import create_engine, text
 from rich.console import Console
@@ -7,6 +9,54 @@ from dotenv import load_dotenv
 load_dotenv()
 
 console = Console()
+
+
+def _normalize_json_value(value):
+    """Normalize incoming JSON/JSONB values so pg8000 can serialize them safely."""
+    if value is None:
+        return []
+    if isinstance(value, (list, dict)):
+        return value
+    try:
+        if pd.isna(value):
+            return []
+    except TypeError:
+        pass
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw or raw.lower() in {"nan", "none", "null"}:
+            return []
+
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, (list, dict)):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        try:
+            parsed = ast.literal_eval(raw)
+            if isinstance(parsed, (list, dict)):
+                return parsed
+        except (ValueError, SyntaxError):
+            pass
+
+        if "," in raw:
+            return [part.strip() for part in raw.split(",") if part.strip()]
+        return [raw]
+    return value
+
+
+def _normalize_text_value(value):
+    """Normalize non-JSON values while preserving SQL NULLs."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except TypeError:
+        pass
+    return str(value)
 
 def export_to_sql(df: pd.DataFrame, table_name: str = "jobs"):
     """
@@ -40,29 +90,38 @@ def export_to_sql(df: pd.DataFrame, table_name: str = "jobs"):
             
         engine = create_engine(engine_url)
 
-        # Prepare data: convert objects to strings and handle types
-        df_sql = df.copy()
-        
-        # Ensure only columns that exist in the table are included
-        # Based on the migration: id, title, company, location, date_posted, source, job_url, description
-        valid_columns = [
-            'title', 'company', 'location', 'date_posted', 'source', 'job_url', 'description',
-            'skills', 'key_takeaways', 'salary', 'salary_expectation', 'job_type', 'location_status', 
-            'resolved_location', 'company_size', 'company_industry'
-        ]
-        df_sql = df_sql[[col for col in valid_columns if col in df_sql.columns]]
-        
-        for col in df_sql.columns:
-            if df_sql[col].dtype == 'object':
-                df_sql[col] = df_sql[col].astype(str)
-
         # Custom insertion with ON CONFLICT DO NOTHING for PostgreSQL (Supabase)
         from sqlalchemy.dialects.postgresql import insert
         from sqlalchemy import Table, MetaData
+        from sqlalchemy.types import JSON
+        from sqlalchemy.dialects.postgresql import JSONB
         
         metadata = MetaData()
         # Reflect the table schema
         table = Table(table_name, metadata, autoload_with=engine)
+
+        # Prepare data
+        df_sql = df.copy()
+        valid_columns = [
+            'title', 'company', 'location', 'date_posted', 'source', 'job_url', 'description',
+            'skills', 'key_takeaways', 'salary', 'work_experience', 'salary_expectation', 'job_type', 'location_status',
+            'resolved_location', 'company_size', 'company_industry'
+        ]
+        table_columns = set(table.columns.keys())
+        export_columns = [col for col in valid_columns if col in df_sql.columns and col in table_columns]
+        df_sql = df_sql[export_columns]
+
+        json_columns = {
+            col.name
+            for col in table.columns
+            if isinstance(col.type, (JSON, JSONB))
+        }
+
+        for col in df_sql.columns:
+            if col in json_columns:
+                df_sql[col] = df_sql[col].apply(_normalize_json_value)
+            else:
+                df_sql[col] = df_sql[col].apply(_normalize_text_value)
         
         with engine.connect() as conn:
             records = df_sql.to_dict(orient='records')

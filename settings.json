@@ -1,13 +1,15 @@
 {
-    "scraping_interval_hours": 5,
+    "scraping_interval_hours": 24,
     "lookback_period_hours": 360,
-    "max_results_per_scrape": 100,
+    "max_results_per_scrape": 5000,
     "phased_scraping": false,
     "jobs_per_phase": 3,
     "cities_per_phase": 3,
     "enabled_platforms": [
         "linkedin",
         "indeed",
+        "zip_recruiter",
+        "bayt",
         "glassdoor",
         "naukri",
         "foundit",
@@ -15,5 +17,6 @@
         "google"
     ],
     "ai_processing_enabled": false,
-    "max_parallel_searches": 2
+    "max_parallel_searches": 3,
+    "multi_layer_scraping": true
 }

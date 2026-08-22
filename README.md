@@ -1,15 +1,17 @@
 # 🔍 Job Scrapper
 
-A powerful Python CLI tool that scrapes job listings from **6 major platforms**, cross-references company locations to resolve ambiguous listings, and deduplicates results intelligently.
+A powerful Python CLI tool that scrapes job listings from **multiple major platforms**, cross-references company locations to resolve ambiguous listings, and deduplicates results intelligently.
 
 ## ✨ Features
 
-- **Multi-Platform Scraping** — LinkedIn, Indeed, Naukri, Google Jobs, Glassdoor, and Internshala
+- **Multi-Platform Scraping** — LinkedIn, Indeed, ZipRecruiter, Bayt, Naukri, Foundit, Google Jobs, Glassdoor, and Internshala
+- **Richer Job Fields** — Better extraction for description, work experience, salary, location, title, and posted date
 - **Smart Location Resolution** — Cross-references company HQ via Wikipedia, Wikidata, and Google to identify jobs in your target city even when the listing says "India" or "Remote"
 - **Fuzzy Deduplication** — Removes duplicate listings across platforms using intelligent fuzzy matching
 - **Beautiful CLI** — Rich terminal output with progress bars, summary tables, and color-coded results
 - **Flexible Export** — CSV, JSON, or both, with auto-generated filenames
 - **Company Directory** — Generates a list of companies with offices in your target location
+- **Camoufox Scraper Engine** — Async browser fetch engine for anti-bot/CAPTCHA-heavy pages
 
 ## 📦 Installation
 
@@ -27,6 +29,9 @@ pip install -r requirements.txt
 
 # Install Playwright browser (needed for Internshala)
 playwright install chromium
+
+# Install Camoufox browser (needed for ScraperEngine)
+camoufox fetch
 ```
 
 ## 🚀 Usage
@@ -38,7 +43,7 @@ python main.py --search "Software Engineer" --location "Mumbai"
 
 ### Specify Platforms
 ```bash
-python main.py -s "Data Analyst" -l "Bangalore" -p linkedin indeed naukri
+python main.py -s "Data Analyst" -l "Bangalore" -p linkedin indeed foundit naukri
 ```
 
 ### Limit Results & Filter by Recency
@@ -97,6 +102,7 @@ python main.py -s "Java Developer" -l "Pune" --no-internshala
 | `--job-type` | | fulltime/parttime/internship/contract | None |
 | `--remote` | | Remote jobs only | False |
 | `--no-internshala` | | Skip Internshala | False |
+| `--no-foundit` | | Skip Foundit | False |
 
 ## 📁 Output
 
@@ -127,8 +133,10 @@ The tool automatically maps local area names and aliases:
 ## ⚠️ Important Notes
 
 - **Rate Limiting**: Job platforms may block rapid requests. Use `--proxy` for large scrapes.
-- **LinkedIn**: Most restrictive platform. Proxies recommended for 50+ results.
+- **LinkedIn**: Most restrictive platform. Proxies recommended for 50+ results. Full description fetching is enabled for richer output.
 - **Internshala**: Uses Playwright (browser automation) and is slower than other platforms.
+- **Google/Naukri**: Prefer Camoufox stealth browser fetch; falls back to HTTP strategies if unavailable.
+- **LinkedIn/Indeed**: Continue to use JobSpy, now with retry backoff and user-agent rotation.
 - **Ethical Usage**: This tool is for personal/educational use. Respect each platform's ToS.
 
 ## 📄 License

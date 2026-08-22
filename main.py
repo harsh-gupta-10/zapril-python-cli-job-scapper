@@ -2,7 +2,8 @@
 Job Scrapper — CLI Entry Point
 
 A powerful multi-platform job scrapper that aggregates listings from
-LinkedIn, Indeed, Naukri, Google Jobs, Glassdoor, and Internshala.
+LinkedIn, Indeed, ZipRecruiter, Bayt, BDJobs, Naukri, Foundit, Google Jobs,
+Glassdoor, and Internshala.
 Features intelligent location resolution and fuzzy deduplication.
 """
 
@@ -33,6 +34,7 @@ from config import (
     INTERNSHALA_ENABLED,
     GLASSDOOR_ENABLED,
     NAUKRI_ENABLED,
+    FOUNDIT_ENABLED,
     GOOGLE_JOBS_ENABLED,
     DEFAULT_MAX_RESULTS,
     DEFAULT_HOURS_OLD,
@@ -42,6 +44,40 @@ from config import (
 )
 
 console = Console()
+
+PLATFORM_ALIASES = {
+    "nokri": "naukri",
+    "naukari": "naukri",
+    "nukri": "naukri",
+    "ziprecruiter": "zip_recruiter",
+    "zip-recruiter": "zip_recruiter",
+    "bd-jobs": "bdjobs",
+}
+
+
+def _normalize_platforms(
+    requested_platforms: list[str],
+    valid_platforms: list[str],
+) -> tuple[list[str], list[str], dict[str, str]]:
+    valid = set(valid_platforms)
+    normalized: list[str] = []
+    skipped: list[str] = []
+    alias_applied: dict[str, str] = {}
+    seen: set[str] = set()
+
+    for original in requested_platforms:
+        raw = original.lower().strip()
+        canonical = PLATFORM_ALIASES.get(raw, raw)
+        if canonical not in valid:
+            skipped.append(original)
+            continue
+        if canonical not in seen:
+            normalized.append(canonical)
+            seen.add(canonical)
+        if canonical != raw:
+            alias_applied[original] = canonical
+
+    return normalized, skipped, alias_applied
 
 
 def print_banner():
@@ -100,7 +136,7 @@ Examples:
         "-p", "--platforms",
         nargs="+",
         default=None,
-        help="Platforms to scrape (default: all). Options: linkedin, indeed, naukri, google, glassdoor, internshala",
+        help=f"Platforms to scrape (default: all). Options: {', '.join(SUPPORTED_PLATFORMS)}",
     )
     parser.add_argument(
         "-n", "--max-results",
@@ -171,6 +207,11 @@ Examples:
         help="Skip Google Jobs scraping",
     )
     parser.add_argument(
+        "--no-foundit",
+        action="store_true",
+        help="Skip Foundit scraping",
+    )
+    parser.add_argument(
         "--resume-state",
         action="store_true",
         help="Resume from partial state file if it matches the current job/city",
@@ -208,9 +249,29 @@ def main():
         all_platforms.append("glassdoor")
     if INTERNSHALA_ENABLED and not args.no_internshala:
         all_platforms.append("internshala")
+    if FOUNDIT_ENABLED and not args.no_foundit:
+        all_platforms.append("foundit")
 
-    platforms = args.platforms if args.platforms else all_platforms
-    platforms = [p.lower().strip() for p in platforms]
+    requested_platforms = args.platforms if args.platforms else all_platforms
+    platforms, skipped_platforms, alias_applied = _normalize_platforms(
+        requested_platforms,
+        all_platforms,
+    )
+
+    if alias_applied:
+        alias_notes = ", ".join(f"{src}→{dst}" for src, dst in alias_applied.items())
+        console.print(f"[yellow]Normalized platform aliases:[/] {alias_notes}")
+
+    if skipped_platforms:
+        console.print(
+            f"[yellow]Skipping unsupported platforms:[/] {', '.join(skipped_platforms)}"
+        )
+
+    if not platforms:
+        console.print(
+            "[bold red]✗ No valid platforms selected.[/]"
+        )
+        sys.exit(1)
 
     # Separate JobSpy platforms from Playwright-based scrapers
     jobspy_platforms = [p for p in platforms if p in JOBSPY_PLATFORMS]
@@ -218,6 +279,7 @@ def main():
     scrape_google = "google" in platforms and not args.no_google
     scrape_glassdoor = "glassdoor" in platforms and not args.no_glassdoor
     scrape_internshala = "internshala" in platforms and not args.no_internshala
+    scrape_foundit = "foundit" in platforms and not args.no_foundit
 
     console.print(
         f"[bold]Platforms:[/]  [cyan]{', '.join(platforms)}[/]"
@@ -259,6 +321,7 @@ def main():
                         if "google" in completed: scrape_google = False
                         if "glassdoor" in completed: scrape_glassdoor = False
                         if "internshala" in completed: scrape_internshala = False
+                        if "foundit" in completed: scrape_foundit = False
         except Exception as e:
             console.print(f"[yellow]Warning: Could not read state file: {e}[/]")
 
@@ -412,6 +475,16 @@ def main():
                         location=args.location,
                         max_results=args.max_results,
                         include_internships=(args.job_type in (None, "internship")),
+                    )
+                elif platform == "foundit" and scrape_foundit:
+                    console.print()
+                    from scrapers.foundit_scraper import scrape_foundit as _scrape_foundit
+                    results = _scrape_foundit(
+                        search_term=search_term,
+                        location=args.location,
+                        max_results=args.max_results,
+                        hours_old=args.hours_old,
+                        job_type=args.job_type,
                     )
                     
                 if not results.empty:

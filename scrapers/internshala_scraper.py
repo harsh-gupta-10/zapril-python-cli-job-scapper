@@ -10,6 +10,13 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 from config import REQUEST_DELAY_SECONDS
+from processors.field_extractor import (
+    clean_html_text,
+    extract_salary_text,
+    extract_work_experience,
+    normalize_date_posted,
+    normalize_text,
+)
 
 console = Console()
 
@@ -220,6 +227,26 @@ def _extract_listing_data(card, is_internship: bool) -> dict | None:
             ".stipend_container_table_cell .item_body",
             ".salary span",
         ])
+        experience_text = _safe_text(card, [
+            ".experience .item_body",
+            ".other_detail_item .item_body",
+            "[class*='experience']",
+        ])
+        posted_text = _safe_text(card, [
+            ".status-success",
+            ".posted_on",
+            ".status_inactive",
+            "[class*='posted']",
+        ])
+        description = _safe_text(card, [
+            ".other_detail_item_row",
+            ".internship_other_details_container",
+            ".internship-description",
+            ".job-description",
+        ])
+        description = clean_html_text(description)
+        salary = normalize_text(stipend) or extract_salary_text(description)
+        work_experience = extract_work_experience(experience_text, description, title)
 
         # Get the link
         link_el = card.query_selector("a.view_detail_button") or card.query_selector("a[href]")
@@ -237,11 +264,12 @@ def _extract_listing_data(card, is_internship: bool) -> dict | None:
             "title": title or "N/A",
             "company": company or "N/A",
             "location": location or "",
-            "salary": stipend or "",
+            "salary": salary,
+            "work_experience": work_experience,
             "job_type": "internship" if is_internship else "fulltime",
-            "date_posted": "",
+            "date_posted": normalize_date_posted(posted_text),
             "job_url": link,
-            "description": "",
+            "description": description,
         }
 
     except Exception:

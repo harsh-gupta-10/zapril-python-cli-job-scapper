@@ -546,6 +546,24 @@ const App = () => {
                       <MapPin size={16} className="text-accent-secondary" /> 
                       {selectedJob.location}
                     </div>
+                    {selectedJob.work_experience && (
+                      <div className="flex items-center gap-1.5 text-white/70">
+                        <Briefcase size={16} className="text-accent-primary" /> 
+                        {selectedJob.work_experience}
+                      </div>
+                    )}
+                    {selectedJob.salary && (
+                      <div className="flex items-center gap-1.5 text-white/70">
+                        <TrendingUp size={16} className="text-accent-success" /> 
+                        {selectedJob.salary}
+                      </div>
+                    )}
+                    {selectedJob.job_type && (
+                      <div className="flex items-center gap-1.5 text-white/70">
+                        <Activity size={16} className="text-accent-secondary" /> 
+                        {selectedJob.job_type}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 text-white/70">
                       <Calendar size={16} /> 
                       {(() => {
@@ -836,20 +854,29 @@ const DashboardView = ({
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="resizable-th" style={{ width: '30%' }}>
+                <th className="resizable-th" style={{ width: '18%' }}>
                   <div className="th-content">Title <div className="resizer" onMouseDown={(e) => handleResize(e, 0)}></div></div>
                 </th>
-                <th className="resizable-th" style={{ width: '20%' }}>
+                <th className="resizable-th" style={{ width: '12%' }}>
                   <div className="th-content">Company <div className="resizer" onMouseDown={(e) => handleResize(e, 1)}></div></div>
                 </th>
-                <th className="resizable-th" style={{ width: '20%' }}>
+                <th className="resizable-th" style={{ width: '12%' }}>
                   <div className="th-content">Location <div className="resizer" onMouseDown={(e) => handleResize(e, 2)}></div></div>
                 </th>
-                <th className="resizable-th" style={{ width: '15%' }}>
-                  <div className="th-content">Date Posted <div className="resizer" onMouseDown={(e) => handleResize(e, 3)}></div></div>
+                <th className="resizable-th" style={{ width: '12%' }}>
+                  <div className="th-content">Work Exp <div className="resizer" onMouseDown={(e) => handleResize(e, 3)}></div></div>
+                </th>
+                <th className="resizable-th" style={{ width: '12%' }}>
+                  <div className="th-content">Salary <div className="resizer" onMouseDown={(e) => handleResize(e, 4)}></div></div>
                 </th>
                 <th className="resizable-th" style={{ width: '10%' }}>
-                  <div className="th-content">Source <div className="resizer" onMouseDown={(e) => handleResize(e, 4)}></div></div>
+                  <div className="th-content">Type <div className="resizer" onMouseDown={(e) => handleResize(e, 5)}></div></div>
+                </th>
+                <th className="resizable-th" style={{ width: '10%' }}>
+                  <div className="th-content">Date <div className="resizer" onMouseDown={(e) => handleResize(e, 6)}></div></div>
+                </th>
+                <th className="resizable-th" style={{ width: '8%' }}>
+                  <div className="th-content">Source <div className="resizer" onMouseDown={(e) => handleResize(e, 7)}></div></div>
                 </th>
                 <th className="w-10"></th>
               </tr>
@@ -868,7 +895,31 @@ const DashboardView = ({
                   </td>
                   <td><div className="flex items-center gap-1.5"><MapPin size={12} className="text-muted" /> {job.location}</div></td>
                   <td>
-                    <div className="flex items-center gap-1.5">
+                    {job.work_experience ? (
+                      <div className="flex items-center gap-1.5 text-xs text-white/70">
+                        <Briefcase size={12} className="text-accent-primary" /> 
+                        {job.work_experience}
+                      </div>
+                    ) : <span className="text-muted text-[10px]">--</span>}
+                  </td>
+                  <td>
+                    {job.salary ? (
+                      <div className="flex items-center gap-1.5 text-xs text-white/70">
+                        <TrendingUp size={12} className="text-accent-success" /> 
+                        {job.salary}
+                      </div>
+                    ) : <span className="text-muted text-[10px]">--</span>}
+                  </td>
+                  <td>
+                    {job.job_type ? (
+                      <div className="flex items-center gap-1.5 text-xs text-white/70">
+                        <Activity size={12} className="text-accent-secondary" /> 
+                        {job.job_type}
+                      </div>
+                    ) : <span className="text-muted text-[10px]">--</span>}
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-1.5 text-xs text-white/70">
                       <Calendar size={12} className="text-muted" /> 
                       {(() => {
                         const dateStr = job.date_posted;
@@ -906,7 +957,7 @@ const DashboardView = ({
               ))}
               {jobs.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="text-center py-10 text-muted">No jobs found matching your criteria.</td>
+                  <td colSpan="9" className="text-center py-10 text-muted">No jobs found matching your criteria.</td>
                 </tr>
               )}
             </tbody>
@@ -1002,7 +1053,23 @@ const ConfigurationView = ({
         <div className="chart-container" style={{ height: 'auto', minHeight: '500px' }}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="chart-title mb-0">Target Cities</h3>
-            <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{citiesConfig.length}</span>
+            <div className="flex items-center gap-4">
+              <div className="flex gap-2">
+                <button 
+                  className="btn-base btn-ghost py-1 px-2.5 text-xs text-accent-primary border-accent-primary/20 hover:bg-accent-primary/10"
+                  onClick={() => setCitiesConfig(citiesConfig.map(c => ({ ...c, enabled: true })))}
+                >
+                  Select All
+                </button>
+                <button 
+                  className="btn-base btn-ghost py-1 px-2.5 text-xs text-muted border-white/5 hover:text-white hover:bg-white/5"
+                  onClick={() => setCitiesConfig(citiesConfig.map(c => ({ ...c, enabled: false })))}
+                >
+                  Deselect All
+                </button>
+              </div>
+              <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{citiesConfig.length}</span>
+            </div>
           </div>
           
           <div className="flex gap-2 mb-6">
@@ -1044,7 +1111,23 @@ const ConfigurationView = ({
         <div className="chart-container" style={{ height: 'auto', minHeight: '500px' }}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="chart-title mb-0">Job Roles</h3>
-            <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{jobTitlesConfig.length}</span>
+            <div className="flex items-center gap-4">
+              <div className="flex gap-2">
+                <button 
+                  className="btn-base btn-ghost py-1 px-2.5 text-xs text-accent-primary border-accent-primary/20 hover:bg-accent-primary/10"
+                  onClick={() => setJobTitlesConfig(jobTitlesConfig.map(r => ({ ...r, enabled: true })))}
+                >
+                  Select All
+                </button>
+                <button 
+                  className="btn-base btn-ghost py-1 px-2.5 text-xs text-muted border-white/5 hover:text-white hover:bg-white/5"
+                  onClick={() => setJobTitlesConfig(jobTitlesConfig.map(r => ({ ...r, enabled: false })))}
+                >
+                  Deselect All
+                </button>
+              </div>
+              <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{jobTitlesConfig.length}</span>
+            </div>
           </div>
           
           <div className="flex gap-2 mb-6">
@@ -1086,7 +1169,23 @@ const ConfigurationView = ({
       <div className="stat-card mt-8">
         <div className="flex justify-between items-center mb-6">
           <h3 className="chart-title mb-0">Search Architecture Tasks</h3>
-          <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{searchesConfig.length}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex gap-3">
+              <button 
+                className="text-[10px] font-bold text-accent-primary uppercase tracking-wider hover:opacity-80 transition-opacity"
+                onClick={() => setSearchesConfig(searchesConfig.map(s => ({ ...s, enabled: true })))}
+              >
+                Enable All
+              </button>
+              <button 
+                className="text-[10px] font-bold text-muted uppercase tracking-wider hover:text-white transition-colors"
+                onClick={() => setSearchesConfig(searchesConfig.map(s => ({ ...s, enabled: false })))}
+              >
+                Disable All
+              </button>
+            </div>
+            <span className="text-xs bg-accent-primary-glow text-accent-primary px-2 py-1 rounded-md font-bold">{searchesConfig.length}</span>
+          </div>
         </div>
         
         <p className="text-xs text-muted mb-6">Define specific combinations of job titles and cities for targeted scraping. If enabled, the pipeline will prioritize these tasks.</p>
@@ -1218,19 +1317,45 @@ const ConfigurationView = ({
               />
             </div>
             <div className="form-group">
-              <label className="text-xs font-bold text-muted uppercase mb-2 block">Max Parallel Searches</label>
-              <input 
-                type="number" 
-                className="input-base w-full border-accent-primary/30"
-                placeholder="Default: 3"
-                value={settings.max_parallel_searches || ''}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                  setSettings({...settings, max_parallel_searches: isNaN(val) ? 0 : val});
-                }}
-              />
-              <p className="text-[9px] text-muted mt-1 italic">Controls how many searches run concurrently.</p>
+              <label className="text-xs font-bold text-muted uppercase mb-2 block">Multi-Layer Scraping</label>
+              <div className="flex items-center gap-3 bg-black/20 p-3 rounded-lg border border-white/5">
+                <button 
+                  className={`action-icon-btn ${settings.multi_layer_scraping ? 'success' : ''}`}
+                  onClick={() => setSettings({...settings, multi_layer_scraping: !settings.multi_layer_scraping})}
+                >
+                  {settings.multi_layer_scraping ? <ToggleRight size={28} className="text-accent-success" /> : <ToggleLeft size={28} className="text-muted" />}
+                </button>
+                <div>
+                  <div className="text-sm font-bold text-white">
+                    {settings.multi_layer_scraping ? 'SIMULTANEOUS' : 'SEQUENTIAL'}
+                  </div>
+                  <div className="text-[9px] text-muted uppercase tracking-wider">
+                    {settings.multi_layer_scraping ? 'Scrape 3-5 searches side-by-side' : 'Scrape one search task at a time'}
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {settings.multi_layer_scraping && (
+              <div className="form-group">
+                <label className="text-xs font-bold text-muted uppercase mb-2 block">Parallel Concurrency (3-5)</label>
+                <input 
+                  type="number" 
+                  min="3"
+                  max="5"
+                  className="input-base w-full border-accent-primary/30"
+                  placeholder="3"
+                  value={settings.max_parallel_searches || ''}
+                  onChange={(e) => {
+                    let val = e.target.value === '' ? 3 : parseInt(e.target.value);
+                    if (val < 1) val = 1;
+                    if (val > 10) val = 10;
+                    setSettings({...settings, max_parallel_searches: isNaN(val) ? 3 : val});
+                  }}
+                />
+                <p className="text-[9px] text-muted mt-1 italic">Configure how many parallel searches to execute side-by-side (recommended: 3 to 5).</p>
+              </div>
+            )}
             
             <div className="form-group">
               <label className="text-xs font-bold text-muted uppercase mb-2 block">AI Processing Power</label>
@@ -1403,6 +1528,73 @@ const ActionsView = ({
   </div>
 );
 
+const TaskTerminalCard = ({ task }) => {
+  const [logs, setLogs] = useState('');
+  const [loading, setLoading] = useState(true);
+  const terminalRef = React.useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchTaskLog = async () => {
+      try {
+        const res = await axios.get(`/api/scraper/task-log/${task.idx}`);
+        if (active) {
+          setLogs(res.data.logs || 'Waiting for scraper output...');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error fetching task log:', err);
+      }
+    };
+
+    fetchTaskLog();
+    const interval = setInterval(fetchTaskLog, 3000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [task.idx]);
+
+  // Auto-scroll to bottom of terminal when logs change
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  return (
+    <div className="bg-black/35 rounded-xl border border-white/10 p-4 flex flex-col h-72">
+      <div className="flex justify-between items-center mb-2 pb-2 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 flex items-center justify-center bg-accent-primary/20 rounded-md text-[10px] font-bold text-accent-primary">
+            {task.idx + 1}
+          </div>
+          <span className="text-xs font-bold text-white truncate max-w-[150px]" title={task.name}>
+            {task.name}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <RefreshCw size={10} className="animate-spin text-accent-primary" />
+          <span className="text-[9px] font-bold text-accent-primary uppercase tracking-wider">Scraping</span>
+        </div>
+      </div>
+      
+      <div 
+        ref={terminalRef}
+        className="flex-1 overflow-y-auto font-mono text-[9px] text-accent-secondary/95 bg-black/65 p-3 rounded-lg custom-scrollbar whitespace-pre-wrap select-text leading-relaxed"
+      >
+        {loading ? 'Initializing console feed...' : logs}
+      </div>
+      
+      <div className="text-[8px] text-muted mt-2 uppercase tracking-wider flex justify-between">
+        <span>Started: {task.start_time}</span>
+        <span>Realtime Feed</span>
+      </div>
+    </div>
+  );
+};
+
 const PipelineStatusCard = ({ state, handleStopScraper, handleKillScraper, stopping }) => {
   const hasParallelTasks = state.running_tasks && state.running_tasks.length > 0;
   
@@ -1412,7 +1604,7 @@ const PipelineStatusCard = ({ state, handleStopScraper, handleKillScraper, stopp
         <div className="flex items-center gap-2">
           <Activity size={18} className="text-accent-primary animate-pulse" />
           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            {hasParallelTasks ? `Parallel Engine Active (${state.running_tasks.length})` : 'Pipeline Active'}
+            {hasParallelTasks ? `Multi-Layer Engine Active (${state.running_tasks.length} Threads)` : 'Pipeline Active'}
           </h3>
         </div>
         <div className="flex items-center gap-3">
@@ -1438,23 +1630,9 @@ const PipelineStatusCard = ({ state, handleStopScraper, handleKillScraper, stopp
       </div>
 
       {hasParallelTasks ? (
-        <div className="space-y-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
-          {state.running_tasks.map((task, i) => (
-            <div key={task.idx || i} className="flex items-center justify-between p-2 bg-black/20 rounded-lg border border-white/5">
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 flex items-center justify-center bg-accent-primary/20 rounded text-[10px] font-bold text-accent-primary">
-                  {task.idx + 1}
-                </div>
-                <div>
-                  <div className="text-xs font-semibold text-white">{task.name}</div>
-                  <div className="text-[9px] text-muted uppercase">Started: {task.start_time}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <RefreshCw size={10} className="animate-spin text-accent-primary" />
-                <span className="text-[9px] font-bold text-accent-primary uppercase">Scraping</span>
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+          {state.running_tasks.map((task) => (
+            <TaskTerminalCard key={task.idx} task={task} />
           ))}
         </div>
       ) : (

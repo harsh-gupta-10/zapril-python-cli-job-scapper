@@ -11,7 +11,6 @@ import re
 import time
 import pandas as pd
 from datetime import datetime, timedelta
-from processors.date_parser import parse_relative_date
 from rich.console import Console
 from rich.progress import (
     Progress,
@@ -19,6 +18,13 @@ from rich.progress import (
     TextColumn,
     BarColumn,
     TaskProgressColumn,
+)
+from processors.field_extractor import (
+    clean_html_text,
+    extract_salary_text,
+    extract_work_experience,
+    normalize_date_posted,
+    normalize_text,
 )
 
 from config import REQUEST_DELAY_SECONDS
@@ -384,19 +390,21 @@ def _parse_json_job(job: dict, location: str) -> dict | None:
             job_url = link if link.startswith("http") else f"{GLASSDOOR_BASE_URL}{link}"
 
         # Date posted
-        date_posted = job.get("datePosted") or job.get("discoverDate") or ""
-        if isinstance(date_posted, (int, float)):
-            # Unix timestamp in milliseconds
-            try:
-                date_posted = datetime.fromtimestamp(date_posted / 1000).strftime("%Y-%m-%d")
-            except (ValueError, OSError):
-                date_posted = ""
+        date_posted = normalize_date_posted(job.get("datePosted") or job.get("discoverDate") or "")
 
         # Job type
         job_type_val = job.get("jobType") or job.get("employmentType") or ""
 
+        description = clean_html_text(job.get("description") or job.get("jobDescription") or "")
         if not title and not company:
             return None
+
+        salary = _extract_salary_from_json(job) or extract_salary_text(description)
+        work_experience = extract_work_experience(
+            job.get("experienceRequirements"),
+            description,
+            title,
+        )
 
         return {
             "source": "glassdoor",
@@ -404,10 +412,11 @@ def _parse_json_job(job: dict, location: str) -> dict | None:
             "company": str(company).strip() or "N/A",
             "location": str(job_location).strip(),
             "salary": salary,
+            "work_experience": work_experience,
             "job_type": str(job_type_val).strip().lower() if job_type_val else "",
             "date_posted": str(date_posted).strip(),
             "job_url": job_url,
-            "description": str(job.get("description") or job.get("jobDescription") or ""),
+            "description": description,
         }
 
     except Exception:
@@ -510,6 +519,19 @@ def _extract_dom_listing(card, location: str) -> dict | None:
             "[class*='salary']",
             "[class*='compensation']",
         ])
+        description = _safe_dom_text(card, [
+            "[class*='JobCard_jobDescription']",
+            "[class*='jobDescription']",
+            "[data-test='job-description']",
+        ])
+        posted_date_raw = _safe_dom_text(card, [
+            "[class*='listingAge']",
+            "[class*='job-age']",
+            "[data-test='job-age']",
+        ])
+        description = clean_html_text(description)
+        salary = normalize_text(salary) or extract_salary_text(description)
+        work_experience = extract_work_experience(description, title)
 
         # Get job URL
         link_el = (
@@ -533,10 +555,11 @@ def _extract_dom_listing(card, location: str) -> dict | None:
             "company": company or "N/A",
             "location": job_location or location,
             "salary": salary or "",
+            "work_experience": work_experience,
             "job_type": "",
-            "date_posted": "",
+            "date_posted": normalize_date_posted(posted_date_raw),
             "job_url": job_url,
-            "description": "",
+            "description": description,
         }
 
     except Exception:
@@ -616,7 +639,10 @@ def _filter_by_age(listings: list[dict], hours_old: int) -> list[dict]:
 
         try:
             # Normalize date first
-            normalized_date = parse_relative_date(date_str)
+            normalized_date = normalize_date_posted(date_str)
+            if not normalized_date:
+                filtered.append(listing)
+                continue
             posted = datetime.strptime(normalized_date, "%Y-%m-%d")
             if posted >= cutoff:
                 filtered.append(listing)

@@ -5,6 +5,7 @@ requires-python = ">=3.10"
 dependencies = [
     "beautifulsoup4",
     "curl-cffi>=0.15.0",
+    "camoufox>=0.4.11",
     "geopy",
     "pandas",
     "playwright",

@@ -167,7 +167,7 @@ def _calc_completeness(row) -> int:
     score = 0
     important_fields = [
         "title", "company", "location", "salary", "description",
-        "job_url", "date_posted", "job_type",
+        "work_experience", "job_url", "date_posted", "job_type",
     ]
 
     for field in important_fields:

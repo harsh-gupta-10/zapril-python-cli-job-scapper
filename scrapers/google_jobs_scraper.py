@@ -1,17 +1,17 @@
 """
-Google Jobs Scraper — Uses curl_cffi with Chrome TLS impersonation
+Google Jobs Scraper — Uses Camoufox + stealth as the primary browser engine
 to access Google's job search results.
 
 Tries to extract structured data from Google's HTML response.
 Falls back gracefully when blocked by anti-bot measures.
 """
 
+import asyncio
 import re
 import json
 import time
 import pandas as pd
 from datetime import datetime, timedelta
-from processors.date_parser import parse_relative_date
 from rich.console import Console
 from rich.progress import (
     Progress,
@@ -19,6 +19,13 @@ from rich.progress import (
     TextColumn,
     BarColumn,
     TaskProgressColumn,
+)
+from processors.field_extractor import (
+    clean_html_text,
+    extract_salary_text,
+    extract_work_experience,
+    normalize_date_posted,
+    normalize_text,
 )
 
 console = Console()
@@ -36,8 +43,8 @@ def scrape_google_jobs(
     """
     Scrape job listings from Google Jobs.
 
-    Uses curl_cffi with TLS fingerprint impersonation to access
-    Google's Jobs vertical (udm=8). Falls back to Playwright if available.
+    Uses Camoufox + stealth to access Google's Jobs vertical (udm=8).
+    Falls back to Playwright/curl_cffi when needed.
     """
     all_listings = []
 
@@ -50,30 +57,47 @@ def scrape_google_jobs(
     ) as progress:
         task = progress.add_task("[cyan]Scraping Google Jobs...", total=None)
 
-        # ── Strategy 1: Try Playwright with stealth ──────
-        progress.update(task, description="[cyan]Google Jobs: Launching browser...")
-        playwright_results = _try_playwright_stealth(search_term, location, max_results, job_type)
+        # ── Strategy 1: Try Camoufox + stealth ───────────
+        progress.update(task, description="[cyan]Google Jobs: Camoufox stealth fetch...")
+        camoufox_results = _try_camoufox_stealth(
+            search_term, location, max_results, job_type
+        )
 
-        if playwright_results:
-            all_listings.extend(playwright_results)
+        if camoufox_results:
+            all_listings.extend(camoufox_results)
             progress.update(
                 task,
                 description=f"[cyan]Google Jobs: {len(all_listings)} jobs from browser",
             )
         else:
-            # ── Strategy 2: Try curl_cffi ────────────────
-            progress.update(task, description="[cyan]Google Jobs: Trying HTTP fallback...")
-            http_results = _try_curl_cffi(search_term, location, max_results, job_type)
+            # ── Strategy 2: Try Playwright stealth fallback ────────────────
+            progress.update(
+                task, description="[cyan]Google Jobs: Trying Playwright fallback..."
+            )
+            playwright_results = _try_playwright_stealth(
+                search_term, location, max_results, job_type
+            )
 
-            if http_results:
-                all_listings.extend(http_results)
+            if playwright_results:
+                all_listings.extend(playwright_results)
             else:
+                # ── Strategy 3: Try curl_cffi ────────────────
                 progress.update(
-                    task,
-                    completed=0,
-                    total=0,
-                    description="[yellow]⚠ Google Jobs: blocked by anti-bot (CAPTCHA)",
+                    task, description="[cyan]Google Jobs: Trying HTTP fallback..."
                 )
+                http_results = _try_curl_cffi(
+                    search_term, location, max_results, job_type
+                )
+
+                if http_results:
+                    all_listings.extend(http_results)
+                else:
+                    progress.update(
+                        task,
+                        completed=0,
+                        total=0,
+                        description="[yellow]⚠ Google Jobs: blocked by anti-bot (CAPTCHA)",
+                    )
 
         total = min(len(all_listings), max_results)
         if total > 0:
@@ -175,6 +199,32 @@ def _try_playwright_stealth(
     return listings
 
 
+def _try_camoufox_stealth(
+    search_term: str, location: str, max_results: int, job_type: str | None
+) -> list[dict]:
+    """Try scraping Google Jobs with async Camoufox + stealth engine."""
+    try:
+        from scrapers.scraper_engine import ScraperEngine, ScraperEngineError
+    except ImportError:
+        return []
+
+    query = _build_search_query(search_term, location, job_type)
+    url = f"{GOOGLE_SEARCH_URL}?q={_url_encode(query)}&udm=8"
+
+    try:
+        engine = ScraperEngine()
+        html = asyncio.run(engine.fetch(url))
+    except (ScraperEngineError, RuntimeError):
+        return []
+
+    # Check for blocking
+    if "/sorry/" in html or "unusual traffic" in html.lower():
+        return []
+
+    listings = _extract_from_html(html, location)
+    return listings[:max_results]
+
+
 def _try_curl_cffi(
     search_term: str, location: str, max_results: int, job_type: str | None
 ) -> list[dict]:
@@ -247,6 +297,7 @@ def _extract_from_html(html: str, location: str) -> list[dict]:
             "company": _clean_html(company),
             "location": location,
             "salary": "",
+            "work_experience": "",
             "job_type": "",
             "date_posted": "",
             "job_url": "",
@@ -267,25 +318,39 @@ def _parse_json_ld_job(data: dict, location: str) -> dict | None:
 
         job_location = location
         loc_data = data.get("jobLocation", {})
+        if isinstance(loc_data, list) and loc_data:
+            loc_data = loc_data[0]
         if isinstance(loc_data, dict):
-            address = loc_data.get("address", {})
+            address = loc_data.get("address", {}) or {}
             if isinstance(address, dict):
                 city = address.get("addressLocality", "")
                 region = address.get("addressRegion", "")
                 job_location = f"{city}, {region}".strip(", ") or location
 
-        date_posted = data.get("datePosted", "")
+        date_posted = normalize_date_posted(data.get("datePosted", ""))
+        description = clean_html_text(data.get("description", ""))
+        salary = _extract_salary_from_json_ld(data) or extract_salary_text(description)
+        work_experience = extract_work_experience(
+            data.get("experienceRequirements"),
+            data.get("qualifications"),
+            description,
+            title,
+        )
+        employment_type = data.get("employmentType", "")
+        if isinstance(employment_type, list):
+            employment_type = ", ".join(normalize_text(v) for v in employment_type if normalize_text(v))
 
         return {
             "source": "google",
             "title": title or "N/A",
             "company": company or "N/A",
             "location": job_location,
-            "salary": "",
-            "job_type": data.get("employmentType", ""),
-            "date_posted": parse_relative_date(date_posted),
+            "salary": salary,
+            "work_experience": work_experience,
+            "job_type": normalize_text(employment_type).lower(),
+            "date_posted": date_posted,
             "job_url": data.get("url", ""),
-            "description": str(data.get("description", "")),
+            "description": description,
         }
     except Exception:
         return None
@@ -319,6 +384,15 @@ def _extract_card_from_element(card, location: str) -> dict | None:
 
         href = card.get_attribute("href") or ""
         job_url = href if href.startswith("http") else ""
+        card_text = _get_text(card)
+        salary = extract_salary_text(card_text)
+        work_experience = extract_work_experience(card_text, title)
+        posted_match = re.search(
+            r"(\d+\s*(?:hour|day|week|month|minute)s?\s+ago|today|yesterday|just now)",
+            card_text,
+            re.IGNORECASE,
+        )
+        date_posted = normalize_date_posted(posted_match.group(1) if posted_match else "")
 
         if not title:
             return None
@@ -328,11 +402,12 @@ def _extract_card_from_element(card, location: str) -> dict | None:
             "title": title,
             "company": company or "N/A",
             "location": job_location or location,
-            "salary": "",
+            "salary": salary,
+            "work_experience": work_experience,
             "job_type": "",
-            "date_posted": "",
+            "date_posted": date_posted,
             "job_url": job_url,
-            "description": "",
+            "description": normalize_text(card_text)[:500],
         }
 
     except Exception:
@@ -378,8 +453,10 @@ def _filter_by_age(listings: list[dict], hours_old: int) -> list[dict]:
             filtered.append(listing)
             continue
         try:
-            # Normalize date first
-            normalized_date = parse_relative_date(date_str)
+            normalized_date = normalize_date_posted(date_str)
+            if not normalized_date:
+                filtered.append(listing)
+                continue
             posted = datetime.strptime(normalized_date, "%Y-%m-%d")
             if posted >= cutoff:
                 filtered.append(listing)
@@ -409,3 +486,48 @@ def _url_encode(text: str) -> str:
     """URL encode a string."""
     import urllib.parse
     return urllib.parse.quote_plus(text)
+
+
+def _extract_salary_from_json_ld(data: dict) -> str:
+    base_salary = data.get("baseSalary")
+    if not isinstance(base_salary, dict):
+        return ""
+
+    currency = normalize_text(base_salary.get("currency")) or "INR"
+    salary_value = base_salary.get("value")
+    if not isinstance(salary_value, dict):
+        return ""
+
+    min_val = salary_value.get("minValue")
+    max_val = salary_value.get("maxValue")
+    unit = normalize_text(salary_value.get("unitText")).lower()
+    suffix = " PA" if "year" in unit else (" PM" if "month" in unit else "")
+
+    if min_val is not None and max_val is not None:
+        return _format_salary_range(min_val, max_val, currency, suffix)
+    if min_val is not None:
+        return f"{_currency_symbol(currency)}{_format_number(min_val)}+{suffix}"
+    if max_val is not None:
+        return f"Up to {_currency_symbol(currency)}{_format_number(max_val)}{suffix}"
+    return ""
+
+
+def _format_salary_range(min_val, max_val, currency: str, suffix: str) -> str:
+    symbol = _currency_symbol(currency)
+    return f"{symbol}{_format_number(min_val)} - {symbol}{_format_number(max_val)}{suffix}"
+
+
+def _format_number(value) -> str:
+    try:
+        return f"{int(float(value)):,}"
+    except (TypeError, ValueError):
+        return normalize_text(value)
+
+
+def _currency_symbol(currency: str) -> str:
+    upper = currency.upper()
+    if upper == "INR":
+        return "₹"
+    if upper == "USD":
+        return "$"
+    return f"{upper} "

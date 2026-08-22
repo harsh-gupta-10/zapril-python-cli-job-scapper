@@ -1,9 +1,11 @@
 """
 JobSpy Scraper — Wraps python-jobspy to fetch listings from
-LinkedIn, Indeed, Naukri, Google Jobs, and Glassdoor.
+LinkedIn, Indeed, ZipRecruiter, Bayt, and BDJobs.
 """
 
 import pandas as pd
+import random
+import time
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
@@ -12,8 +14,23 @@ from config import (
     DEFAULT_COUNTRY_INDEED,
     REQUEST_DELAY_SECONDS,
 )
+from processors.field_extractor import (
+    extract_salary_text,
+    extract_work_experience,
+    normalize_date_posted,
+    normalize_text,
+)
 
 console = Console()
+_RNG = random.SystemRandom()
+_RETRYABLE_MARKERS = ("429", "403", "captcha", "blocked", "too many requests")
+_USER_AGENT_POOL = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6_6) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+)
 
 
 def scrape_with_jobspy(
@@ -88,9 +105,9 @@ def scrape_with_jobspy(
     if proxies:
         scrape_params["proxies"] = proxies
 
-    # Fetch full descriptions for LinkedIn (slower but more data)
+    # Fetch full descriptions for LinkedIn (slower but much richer output).
     if "linkedin" in site_names:
-        scrape_params["linkedin_fetch_description"] = False
+        scrape_params["linkedin_fetch_description"] = True
 
     # ── Execute the scrape ────────────────────────────────────────
     all_jobs = pd.DataFrame()
@@ -107,7 +124,7 @@ def scrape_with_jobspy(
         )
 
         try:
-            all_jobs = scrape_jobs(**scrape_params)
+            all_jobs = _run_jobspy_with_retry(scrape_jobs, scrape_params)
             progress.update(
                 task,
                 completed=len(all_jobs),
@@ -150,7 +167,6 @@ def _scrape_individual_platforms(
     doesn't kill the entire run.
     """
     from jobspy import scrape_jobs
-    import time
 
     frames = []
 
@@ -162,7 +178,7 @@ def _scrape_individual_platforms(
         task = progress.add_task(f"[cyan]  ↳ Scraping {site}...", total=None)
 
         try:
-            df = scrape_jobs(**params)
+            df = _run_jobspy_with_retry(scrape_jobs, params)
             frames.append(df)
             progress.update(
                 task,
@@ -176,11 +192,54 @@ def _scrape_individual_platforms(
                 description=f"[red]  ↳ {site}: Failed — {str(e)[:60]}",
             )
 
-        time.sleep(REQUEST_DELAY_SECONDS)
+        time.sleep(max(REQUEST_DELAY_SECONDS, _RNG.uniform(2, 8)))
 
     if frames:
         return pd.concat(frames, ignore_index=True)
     return pd.DataFrame()
+
+
+def _run_jobspy_with_retry(scrape_jobs_func, params: dict, max_retries: int = 3) -> pd.DataFrame:
+    """
+    Run a JobSpy scrape call with user-agent rotation and retry backoff for
+    common anti-bot response failures.
+    """
+    last_error = None
+    max_attempts = max_retries + 1
+    previous_ua = None
+
+    for attempt in range(1, max_attempts + 1):
+        attempt_params = params.copy()
+        user_agent = _choose_user_agent(previous_ua)
+        previous_ua = user_agent
+        attempt_params["user_agent"] = user_agent
+
+        if attempt > 1:
+            time.sleep(_RNG.uniform(2, 8))
+
+        try:
+            return scrape_jobs_func(**attempt_params)
+        except Exception as exc:
+            last_error = exc
+            err = str(exc).lower()
+            is_retryable = any(marker in err for marker in _RETRYABLE_MARKERS)
+            if not is_retryable or attempt >= max_attempts:
+                raise
+
+            backoff = (2 ** (attempt - 1)) + _RNG.uniform(0.25, 0.75)
+            time.sleep(backoff)
+
+    if last_error:
+        raise last_error
+    return pd.DataFrame()
+
+
+def _choose_user_agent(previous_ua: str | None) -> str:
+    if len(_USER_AGENT_POOL) == 1:
+        return _USER_AGENT_POOL[0]
+
+    choices = [ua for ua in _USER_AGENT_POOL if ua != previous_ua]
+    return _RNG.choice(choices)
 
 
 def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -227,7 +286,7 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df["location"] = ""
 
-    # Build salary string
+    # Build salary string from structured min/max fields when available.
     if "salary_min" in df.columns and "salary_max" in df.columns:
         df["salary"] = df.apply(
             lambda row: _format_salary(row.get("salary_min"), row.get("salary_max")),
@@ -236,12 +295,65 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     elif "salary" not in df.columns:
         df["salary"] = ""
 
+    # Prefer canonical job URL if direct URL exists.
+    if "job_url" not in df.columns and "job_url_direct" in df.columns:
+        df["job_url"] = df["job_url_direct"]
+
+    # Ensure description exists and is clean.
+    if "description" not in df.columns:
+        df["description"] = ""
+    df["description"] = df["description"].apply(normalize_text)
+
+    # Normalize posted date to YYYY-MM-DD where possible.
+    if "date_posted" in df.columns:
+        df["date_posted"] = df["date_posted"].apply(normalize_date_posted)
+    else:
+        df["date_posted"] = ""
+
+    # Fill salary from description when structured salary is missing.
+    df["salary"] = df.apply(
+        lambda row: normalize_text(row.get("salary")) or extract_salary_text(row.get("description")),
+        axis=1,
+    )
+
+    # Extract work experience from available source fields + description.
+    exp_source_columns = [
+        col
+        for col in (
+            "experience",
+            "experience_range",
+            "experience_level",
+            "job_level",
+            "seniority",
+            "requirements",
+        )
+        if col in df.columns
+    ]
+    df["work_experience"] = df.apply(
+        lambda row: extract_work_experience(
+            *(row.get(col) for col in exp_source_columns),
+            row.get("description"),
+            row.get("title"),
+        ),
+        axis=1,
+    )
+
     # Add tracking columns
     df["location_status"] = "unknown"
     df["resolved_location"] = ""
 
     # Ensure all values are strings for text columns
-    text_cols = ["title", "company", "location", "source", "job_type", "salary", "description"]
+    text_cols = [
+        "title",
+        "company",
+        "location",
+        "source",
+        "job_type",
+        "salary",
+        "work_experience",
+        "description",
+        "job_url",
+    ]
     for col in text_cols:
         if col in df.columns:
             df[col] = df[col].fillna("").astype(str)
